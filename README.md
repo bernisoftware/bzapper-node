@@ -306,6 +306,75 @@ console.log(created.api_key); // guarde — mostrada só uma vez!
 await bz.revokeKey(created.key.id);
 ```
 
+## Webhooks
+
+**Gerencie** suas assinaturas de webhook:
+
+```ts
+const hook = await bz.createWebhook({
+  url: "https://seuapp.com/webhooks/bzapper",
+  event_types: ["message.received", "instance.banned"], // omita = todos os eventos
+});
+console.log(hook.secret); // segredo de assinatura — devolvido UMA vez, guarde agora
+
+await bz.listWebhooks();
+await bz.updateWebhook(hook.id, { active: false });        // pausar
+await bz.updateWebhook(hook.id, { secret: "regenerate" }); // rotacionar segredo
+await bz.deleteWebhook(hook.id);
+```
+
+**Receba e processe** as entregas — `Webhooks` verifica a assinatura HMAC,
+parseia o envelope em um evento tipado e roteia para seus handlers (zero
+dependências; usa o `crypto` nativo do Node):
+
+```ts
+import { Webhooks } from "@bzapper/client";
+
+const hooks = new Webhooks(process.env.BZAPPER_WEBHOOK_SECRET!); // o secret do createWebhook
+
+hooks.on("message.received", (event) => {
+  console.log(event.sender?.name, event.payload.body);
+});
+
+hooks.on("instance.banned", (event) => {
+  alert(event.instanceId);
+});
+
+// No seu endpoint HTTP. Passe o corpo CRU e o header X-Bzapper-Signature.
+// Lança WebhookSignatureError se a assinatura for inválida — não processe nesse caso.
+await hooks.handle(rawBody, signature);
+```
+
+O `event` tipado tem `id`, `type`, `timestamp`, `instanceId`,
+`clientReference`, `group`, `sender`, `mentions`, `payload` e o `raw` original
+(JSON do envelope, em snake_case). Use `event.id` para idempotência (a API pode
+reentregar). Para uso de baixo nível há `verifyWebhook(secret, rawBody, signature)`
+e `constructWebhookEvent(secret, rawBody, signature)`.
+
+### Express
+
+`Webhooks#middleware()` devolve um middleware estilo Express. Ele precisa do
+**corpo cru**, então monte `express.raw()` na rota para que `req.body` seja um
+`Buffer` (não um objeto já parseado):
+
+```ts
+import express from "express";
+import { Webhooks } from "@bzapper/client";
+
+const app = express();
+const hooks = new Webhooks(process.env.BZAPPER_WEBHOOK_SECRET!);
+
+hooks.on("message.received", (e) => console.log(e.payload.body));
+
+app.post(
+  "/webhooks/bzapper",
+  express.raw({ type: "application/json" }), // entrega req.body como Buffer cru
+  hooks.middleware(),                        // verifica, dispara e responde 200/400
+);
+
+app.listen(3000);
+```
+
 ## Uso
 
 ```ts
