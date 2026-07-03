@@ -52,6 +52,16 @@ import type {
   SetProfileParams,
   UpdateGroupParticipantsParams,
   UsageSummary,
+  Scheduled,
+  Campaign,
+  CampaignCreateParams,
+  CampaignStats,
+  CampaignRecipient,
+  CampaignRecipientsParams,
+  AddRecipientsResult,
+  CampaignDryRun,
+  CampaignEstimate,
+  EstimateCampaignParams,
 } from "./types.js";
 
 /** Opções de construção do cliente. */
@@ -188,6 +198,88 @@ export class Bzapper {
    */
   sendList(params: SendListParams): Promise<MessageQueued> {
     return this.post("/messages/list", params);
+  }
+
+  // -------------------------------------------------------------------------
+  // Envio agendado (scheduled_at em qualquer envio)
+  // -------------------------------------------------------------------------
+
+  /** Lista os agendamentos pendentes/recentes. `GET /messages/scheduled` */
+  listScheduled(): Promise<{ data: Scheduled[] }> {
+    return this.get("/messages/scheduled");
+  }
+
+  /** Cancela um agendamento ainda pendente. `DELETE /messages/scheduled/{id}` */
+  cancelScheduled(id: string): Promise<void> {
+    return this.delete(`/messages/scheduled/${encodeURIComponent(id)}`);
+  }
+
+  // -------------------------------------------------------------------------
+  // Campanhas (Pro + add-on de campanhas)
+  // -------------------------------------------------------------------------
+
+  /** Cria uma campanha (com variações). `POST /campaigns` */
+  createCampaign(params: CampaignCreateParams): Promise<Campaign> {
+    return this.post("/campaigns", params);
+  }
+
+  /** Lista as campanhas do projeto. `GET /campaigns` */
+  listCampaigns(): Promise<{ data: Campaign[] }> {
+    return this.get("/campaigns");
+  }
+
+  /** Campanha + estatísticas. `GET /campaigns/{id}` */
+  getCampaign(id: string): Promise<{ campaign: Campaign; stats: CampaignStats }> {
+    return this.get(`/campaigns/${encodeURIComponent(id)}`);
+  }
+
+  /** Adiciona destinatários (array `recipients` ou mapa `contacts`). `POST /campaigns/{id}/recipients` */
+  addCampaignRecipients(id: string, params: CampaignRecipientsParams): Promise<AddRecipientsResult> {
+    return this.post(`/campaigns/${encodeURIComponent(id)}/recipients`, params);
+  }
+
+  /** Lista destinatários. `GET /campaigns/{id}/recipients` */
+  listCampaignRecipients(id: string): Promise<{ data: CampaignRecipient[] }> {
+    return this.get(`/campaigns/${encodeURIComponent(id)}/recipients`);
+  }
+
+  /** Inicia (ou agenda) a campanha. `POST /campaigns/{id}/start` */
+  startCampaign(id: string): Promise<{ id: string; status: string }> {
+    return this.post(`/campaigns/${encodeURIComponent(id)}/start`);
+  }
+
+  /** Pausa a campanha. `POST /campaigns/{id}/pause` */
+  pauseCampaign(id: string): Promise<{ id: string; status: string }> {
+    return this.post(`/campaigns/${encodeURIComponent(id)}/pause`);
+  }
+
+  /** Retoma a campanha. `POST /campaigns/{id}/resume` */
+  resumeCampaign(id: string): Promise<{ id: string; status: string }> {
+    return this.post(`/campaigns/${encodeURIComponent(id)}/resume`);
+  }
+
+  /** Cancela a campanha. `POST /campaigns/{id}/cancel` */
+  cancelCampaign(id: string): Promise<{ id: string; status: string }> {
+    return this.post(`/campaigns/${encodeURIComponent(id)}/cancel`);
+  }
+
+  /** Simula a campanha sem disparar (números, duração estimada, avisos). `POST /campaigns/{id}/dry-run` */
+  dryRunCampaign(id: string): Promise<CampaignDryRun> {
+    return this.post(`/campaigns/${encodeURIComponent(id)}/dry-run`);
+  }
+
+  /** Edita uma campanha ainda não iniciada (rascunho/agendada); substitui as variações quando enviadas. `PATCH /campaigns/{id}` */
+  updateCampaign(id: string, params: CampaignCreateParams): Promise<Campaign> {
+    return this.patch(`/campaigns/${encodeURIComponent(id)}`, params);
+  }
+
+  /** Estimativa ao vivo (números elegíveis + duração) para N destinatários, sem criar a campanha. `GET /campaigns/estimate` */
+  estimateCampaign(params: EstimateCampaignParams = {}): Promise<CampaignEstimate> {
+    return this.get("/campaigns/estimate", {
+      recipients: params.recipients,
+      pacing: params.pacing,
+      pool_id: params.pool_id,
+    });
   }
 
   // -------------------------------------------------------------------------

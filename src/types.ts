@@ -54,6 +54,12 @@ export interface SendBase {
    * com `to` (atendimento). Padrão true; envie false para forçar rotação.
    */
   sticky?: boolean;
+  /**
+   * Agenda o envio para um instante futuro (RFC3339). O número é escolhido na
+   * hora do envio. Janela máx.: Free 24h, Pro 30 dias, 1 ano com o add-on de
+   * agendamento estendido. Retorna status `scheduled`. OTP não pode ser agendado.
+   */
+  scheduled_at?: string;
 }
 
 /** Mídia por URL **ou** base64 (nunca os dois). */
@@ -529,4 +535,146 @@ export interface ProjectUsage {
 export interface AccountUsage {
   account: UsageSummary;
   projects: ProjectUsage[];
+}
+
+// ---------------------------------------------------------------------------
+// Envio agendado
+// ---------------------------------------------------------------------------
+
+/** Um envio agendado (guardado até o `scheduled_at`). */
+export interface Scheduled {
+  id: string;
+  scheduled_at: string;
+  status: "pending" | "claimed" | "promoted" | "canceled" | "failed";
+  message_id?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Campanhas (Pro + add-on de campanhas)
+// ---------------------------------------------------------------------------
+
+/** Variação do template (rotacionada). Corpo aceita {variaveis} e spintax {a|b}. */
+export interface CampaignVariation {
+  body: string;
+  weight?: number;
+  media?: Record<string, unknown>;
+}
+
+export interface CampaignCreateParams {
+  name?: string;
+  pool_id?: string;
+  pacing_profile?: "conservative" | "normal";
+  /** Início futuro = campanha agendada. */
+  start_at?: string;
+  variations: CampaignVariation[];
+}
+
+export interface Campaign {
+  id: string;
+  name: string;
+  status: "draft" | "scheduled" | "running" | "paused" | "completed" | "canceled";
+  rail: "unofficial" | "official";
+  pacing_profile: "conservative" | "normal";
+  pool_id?: string;
+  start_at?: string;
+  paused_reason?: string;
+  created_at?: string;
+}
+
+export interface CampaignStats {
+  total: number;
+  pending: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  suppressed: number;
+}
+
+/** Item da lista `recipients`: telefone + payload de variáveis. */
+export interface CampaignRecipientInput {
+  phone: string;
+  payload?: Record<string, unknown>;
+}
+
+/** Subconjunto dos filtros de busca de contatos para escolher destinatários. */
+export interface ContactFilter {
+  search?: string;
+  tags?: string[];
+  /** Exige TODAS as tags (default: qualquer uma). */
+  tags_all?: boolean;
+  groups?: string[];
+  city?: string;
+  state?: string;
+  country?: string;
+  has_email?: boolean;
+}
+
+/**
+ * Formas de adicionar destinatários (combináveis): array `recipients`, mapa
+ * `contacts` (telefone → payload), `contact_ids` (contatos explícitos) e/ou
+ * `contact_filter` (todo contato que casa o filtro). Para contact_ids/filter
+ * os telefones são resolvidos no servidor e restritos a contatos ATIVOS
+ * (bloqueado/opt-out/inalcançável nunca entram); a supressão é re-checada.
+ */
+export interface CampaignRecipientsParams {
+  recipients?: CampaignRecipientInput[];
+  contacts?: Record<string, Record<string, unknown>>;
+  /** Ids de contatos selecionados explicitamente (só os ativos entram). */
+  contact_ids?: string[];
+  /** Adiciona todo contato ATIVO que casa este filtro. */
+  contact_filter?: ContactFilter;
+  /**
+   * Substitui toda a lista em vez de anexar (limpa antes). Só permitido
+   * enquanto a campanha está draft/scheduled.
+   */
+  replace?: boolean;
+}
+
+export interface AddRecipientsResult {
+  inserted: number;
+  suppressed: number;
+  skipped: number;
+}
+
+/** Um destinatário da campanha, com estado de entrega por contato. */
+export interface CampaignRecipient {
+  id: string;
+  /** Só dígitos. */
+  phone: string;
+  /** Resolvido da base de contatos, se houver. */
+  contact_name?: string;
+  status: "pending" | "claimed" | "sent" | "failed" | "suppressed";
+  /** Estado real de entrega vindo dos recibos do WhatsApp. */
+  delivery?: "" | "sent" | "delivered" | "read";
+  message_id?: string;
+  last_error?: string;
+}
+
+/** Estimativa de duração de envio ao vivo (sem precisar de campanha). */
+export interface CampaignEstimate {
+  recipients: number;
+  /** Números aquecidos e elegíveis agora. */
+  numbers_available: number;
+  estimated_seconds: number;
+  /** Ex.: `2h15m0s`. */
+  estimated_human: string;
+}
+
+/** Parâmetros (query) da estimativa ao vivo. */
+export interface EstimateCampaignParams {
+  recipients?: number;
+  pacing?: "conservative" | "normal";
+  pool_id?: string;
+}
+
+export interface CampaignDryRun {
+  campaign_id: string;
+  stats: CampaignStats;
+  variations: number;
+  numbers_available: number;
+  missing_variables: string[];
+  estimated_seconds: number;
+  estimated_human: string;
+  warnings: string[];
 }

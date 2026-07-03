@@ -1,0 +1,23 @@
+# Publica @bzapper/client no npmjs ao dar push de uma tag vX.Y.Z no repo público
+# bernisoftware/bzapper-node. Requer secret NPM_TOKEN (Automation token do org @bzapper).
+name: publish
+on:
+  push:
+    tags: ['v*']
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # provenance (npm)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm install
+      - run: npm run build
+      - run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
