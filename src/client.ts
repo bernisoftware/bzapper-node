@@ -64,12 +64,19 @@ import type {
   EstimateCampaignParams,
 } from "./types.js";
 
+/** URL base padrão da API (produção). Sobrescreva só em dev/self-host. */
+export const DEFAULT_BASE_URL = "https://api.bzapper.com.br";
+
 /** Opções de construção do cliente. */
 export interface BzapperOptions {
-  /** Ex.: `http://localhost:8080` em dev, `https://api.bzapper.com.br` em prod. */
-  baseUrl: string;
-  /** API key do tenant (ex.: `bz_live_...`). */
+  /** API key do tenant (ex.: `bz_live_...`). Único campo obrigatório. */
   apiKey: string;
+  /**
+   * URL base da API. **Opcional** — por padrão o SDK aponta para produção
+   * (`https://api.bzapper.com.br`). Informe só em dev (`http://localhost:8080`)
+   * ou self-host.
+   */
+  baseUrl?: string;
   /** BCP-47, ex.: `pt-BR`. Enviado como `Accept-Language` quando informado. */
   locale?: string;
   /** Timeout por requisição em milissegundos. Default 30000. */
@@ -87,7 +94,7 @@ type Query = Record<string, string | number | boolean | undefined>;
  * ```ts
  * import { Bzapper } from "@bzapper/client";
  *
- * const bz = new Bzapper({ baseUrl: "http://localhost:8080", apiKey: "bz_live_..." });
+ * const bz = new Bzapper({ apiKey: "bz_live_..." }); // aponta para produção
  * await bz.sendText({ to: "+5511999999999", body: "Olá!" });
  * ```
  */
@@ -99,10 +106,9 @@ export class Bzapper {
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: BzapperOptions) {
-    if (!options?.baseUrl) throw new Error("Bzapper: `baseUrl` é obrigatório.");
     if (!options?.apiKey) throw new Error("Bzapper: `apiKey` é obrigatório.");
 
-    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.apiKey = options.apiKey;
     this.locale = options.locale;
     this.timeout = options.timeout ?? 30_000;

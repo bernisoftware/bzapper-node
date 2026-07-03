@@ -4,15 +4,15 @@
  * Rode com: `npx tsx examples/quickstart.ts` (ou compile e rode com node).
  *
  * Defina as variáveis de ambiente:
- *   BZAPPER_BASE_URL  (default: http://localhost:8080)
- *   BZAPPER_API_KEY   (ex.: bz_live_...)
+ *   BZAPPER_API_KEY   (ex.: bz_live_...)  — obrigatório
+ *   BZAPPER_BASE_URL  (opcional; default = produção. Use só em dev/self-host)
  *   TO                (destino E.164, ex.: +5511999999999)
  */
 import { Bzapper, BzapperError } from "@bzapper/client";
 
 const bz = new Bzapper({
-  baseUrl: process.env.BZAPPER_BASE_URL ?? "http://localhost:8080",
   apiKey: process.env.BZAPPER_API_KEY ?? "bz_live_xxx",
+  baseUrl: process.env.BZAPPER_BASE_URL, // opcional: sem isto, aponta para produção
   locale: "pt-BR",
   timeout: 30_000,
 });

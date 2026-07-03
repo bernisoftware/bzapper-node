@@ -19,29 +19,29 @@ Requer **Node 18+** (fetch nativo).
 ```ts
 import { Bzapper } from "@bzapper/client";
 
-const bz = new Bzapper({
-  baseUrl: "http://localhost:8080", // prod: https://api.bzapper.com.br
-  apiKey: "bz_live_...",
-});
+const bz = new Bzapper({ apiKey: "bz_live_..." });
 
 await bz.sendText({ to: "+5511999999999", body: "Olá!" });
 ```
+
+O `baseUrl` tem default de produção (`https://api.bzapper.com.br`) e é **opcional** —
+informe apenas em dev/self-host: `new Bzapper({ apiKey: "bz_live_...", baseUrl: "http://localhost:8080" })`.
 
 Também há uma factory equivalente:
 
 ```ts
 import { createClient } from "@bzapper/client";
-const bz = createClient({ baseUrl: "...", apiKey: "..." });
+const bz = createClient({ apiKey: "bz_live_..." });
 ```
 
 ## Configuração
 
 ```ts
 new Bzapper({
-  baseUrl: "https://api.bzapper.com.br",
   apiKey: "bz_live_...",
   locale: "pt-BR",   // opcional → header Accept-Language
   timeout: 30_000,   // opcional, ms (default 30000)
+  baseUrl: "http://localhost:8080", // opcional, só em dev/self-host
 });
 ```
 
