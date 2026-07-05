@@ -31,6 +31,7 @@ import type {
   GroupList,
   Instance,
   InstanceList,
+  ListInstancesParams,
   JoinGroupParams,
   MessageList,
   MessageQueued,
@@ -292,9 +293,14 @@ export class Bzapper {
   // Instâncias (números)
   // -------------------------------------------------------------------------
 
-  /** Lista instâncias do tenant. `GET /instances` */
-  listInstances(): Promise<InstanceList> {
-    return this.get("/instances");
+  /**
+   * Lista instâncias (números) do tenant. `GET /instances`
+   *
+   * Passe `project_id` para escopar por projeto (um id ou `"all"`); sem
+   * argumento, usa o projeto ativo.
+   */
+  listInstances(params: ListInstancesParams = {}): Promise<InstanceList> {
+    return this.get("/instances", { project_id: params.project_id });
   }
 
   /** Cria uma instância. `POST /instances` */
@@ -493,11 +499,12 @@ export class Bzapper {
   // Contatos (base capturada das conversas — compartilhada na conta)
   // -------------------------------------------------------------------------
 
-  /** Lista a base de contatos da conta (filtro opcional por projeto). `GET /contacts` */
+  /** Lista a base de contatos da conta (filtros opcionais por projeto e número). `GET /contacts` */
   listContacts(params: ListContactsParams = {}): Promise<ContactRecordList> {
     return this.get("/contacts", {
       search: params.search,
       project_id: params.project_id,
+      instance_id: params.instance_id,
       limit: params.limit,
     });
   }

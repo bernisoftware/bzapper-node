@@ -503,7 +503,21 @@ export interface ListContactsParams {
   search?: string;
   /** Filtra por projeto: id do projeto ou "current" (o da sua key). */
   project_id?: string;
+  /**
+   * Filtra por um número (instância) com que o contato interagiu. O vínculo
+   * contato↔número é mantido automaticamente pela API.
+   */
+  instance_id?: string;
   limit?: number;
+}
+
+/** Filtro opcional de {@link BzapperClient.listInstances}. */
+export interface ListInstancesParams {
+  /**
+   * Escopo dos números por projeto: id do projeto, ou `"all"` para todos os
+   * números da conta. Omita para usar o projeto ativo (X-Project-Id).
+   */
+  project_id?: string;
 }
 
 /** Identidade dos números (kit de marca + "Sobre"). Vive no projeto. */
