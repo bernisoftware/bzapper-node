@@ -333,6 +333,20 @@ export class Bzapper {
     return this.post(`/instances/${encodeURIComponent(id)}/disconnect`);
   }
 
+  /**
+   * Apaga a credencial do dispositivo pareado, forçando um novo pareamento
+   * limpo. Use quando o `connectInstance` não emite QR ou o pareamento travou:
+   * o logout comum só desreferencia e deixa o dispositivo antigo para trás.
+   *
+   * Destrutivo e irreversível — o número fica offline e precisa escanear o QR
+   * de novo. É idempotente e pode ser repetido com segurança.
+   *
+   * `POST /instances/{id}/clear-session`
+   */
+  clearInstanceSession(id: string): Promise<void> {
+    return this.post(`/instances/${encodeURIComponent(id)}/clear-session`);
+  }
+
   // -------------------------------------------------------------------------
   // API keys (self-serve)
   // -------------------------------------------------------------------------

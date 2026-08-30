@@ -193,9 +193,33 @@ export interface Instance {
   jid?: string;
   status: InstanceStatus;
   status_reason?: InstanceReason;
+  /** Quando um ban TEMPORÁRIO expira (o número reconecta sozinho); ausente = permanente ou sem ban. */
+  banned_until?: string | null;
   proxy_url?: string;
   created_at?: string;
   updated_at?: string;
+  /**
+   * Envios recusados pelo WhatsApp em sequência. Zera no primeiro envio aceito.
+   * Um número `connected` com valor acima de zero está vivo, mas não entrega —
+   * veja `last_send_error_code`.
+   */
+  consecutive_send_failures?: number;
+  /** Código devolvido pelo WhatsApp na última recusa (ver REACH_OUT_LOCK_CODE). */
+  last_send_error_code?: number;
+  last_send_failure_at?: string;
+  last_send_error?: string;
+}
+
+/**
+ * Bloqueio anti-spam do WhatsApp (reach-out time-lock). É limite por conta, não
+ * falha de infraestrutura: a sessão segue saudável, responder a quem falou
+ * primeiro continua funcionando, e costuma liberar em algumas horas.
+ */
+export const REACH_OUT_LOCK_CODE = 463;
+
+/** Indica se o WhatsApp está recusando os envios deste número pelo time-lock. */
+export function isReachOutLocked(instance: Instance): boolean {
+  return instance.last_send_error_code === REACH_OUT_LOCK_CODE && (instance.consecutive_send_failures ?? 0) > 0;
 }
 
 export interface Pagination {
