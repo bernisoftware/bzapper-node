@@ -4,7 +4,9 @@ SDK oficial do **bZapper** para Node/TypeScript — gateway de WhatsApp multi-te
 
 - ESM + types completos
 - **Zero dependências de runtime** (usa `fetch` nativo do Node 18+)
-- Erro tipado `BzapperError` com `code` estável
+- Erros tipados (`BzapperError` + subclasses por status) com `code` estável e `requestId`
+- Novas tentativas automáticas seguras (`Idempotency-Key` em toda escrita) — padrão Berni Software
+- Um método para cada operação pública da API (159), testado contra a suíte de conformidade
 
 ## Instalação
 
@@ -13,6 +15,9 @@ npm i @bzapper/client
 ```
 
 Requer **Node 18+** (fetch nativo).
+
+**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.6.2"`, sem `^`): cada release
+declara nas notas se muda a superfície pública ou se é só aditiva.
 
 ## Hello world
 
@@ -34,18 +39,31 @@ import { createClient } from "@bzapper/client";
 const bz = createClient({ apiKey: "bz_live_..." });
 ```
 
+## Autenticação
+
+Crie a API key no painel do bZapper (**Configurações → API keys**) ou por código com
+`bz.createKey(...)`. A key (`bz_live_...`) pertence a um **projeto** (números, inbox e stats são
+isolados por projeto); para agir em outro projeto da conta, passe `projectId` (vai no header
+`X-Project-Id`). Nunca exponha a key no navegador.
+
 ## Configuração
 
 ```ts
 new Bzapper({
   apiKey: "bz_live_...",
-  locale: "pt-BR",   // opcional → header Accept-Language
-  timeout: 30_000,   // opcional, ms (default 30000)
+  locale: "pt-BR",   // opcional → header Accept-Language (mensagens de erro traduzidas)
+  timeout: 30_000,   // opcional, ms por tentativa (default 30000)
+  maxRetries: 2,     // opcional, novas tentativas além da primeira (default 2; 0 desliga)
+  projectId: "…",    // opcional → header X-Project-Id
   baseUrl: "http://localhost:8080", // opcional, só em dev/self-host
 });
 ```
 
-Toda requisição envia `Authorization: Bearer <apiKey>`, `Content-Type: application/json` (quando há corpo) e `Accept-Language: <locale>` (se informado).
+Toda requisição envia `Authorization: Bearer <apiKey>`, `Accept: application/json`,
+`X-Bzapper-Client: bzapper-node/<versão>` (e o mesmo `User-Agent`), um `X-Request-Id` por
+chamada, `Idempotency-Key` nas escritas, `Content-Type: application/json` (quando há corpo) e
+`Accept-Language`/`X-Project-Id` quando configurados. Todo método aceita um **último argumento
+opcional** `{ idempotencyKey?, timeout?, maxRetries?, signal? }`.
 
 ## Mensagens
 
@@ -196,6 +214,20 @@ await bz.sendList({
 
 > **Caveat pétreo:** botões e listas **não são confiáveis** no WhatsApp (pior em grupos). A API **sempre** envia um **menu de texto numerado** equivalente como fallback — então o destinatário pode receber um texto numerado em vez de botões nativos.
 
+### Editar, apagar, encaminhar, marcar lido e agendar
+
+```ts
+await bz.editMessage(msg.message_id, { text: "Texto corrigido" });
+await bz.revokeMessage(msg.message_id, { for_everyone: true });
+await bz.forwardMessage({ instance_id: inst.id, to: "+5511988887777", from_chat: jid, wa_message_id: "3EB0…" });
+await bz.markRead("3EB0…", { instance_id: inst.id, chat: jid });
+
+// Qualquer envio aceita `scheduled_at` (RFC3339).
+const s = await bz.sendText({ to: "+5511999999999", body: "Lembrete", scheduled_at: "2026-10-01T12:00:00Z" });
+const { data: pending } = await bz.listScheduled({ limit: 50 });
+await bz.cancelScheduled(s.scheduled_id!);
+```
+
 ## Instâncias (números)
 
 ```ts
@@ -217,6 +249,39 @@ const code = await bz.connectInstance(inst.id, "code");
 console.log(code.pair_code);
 
 await bz.disconnectInstance(inst.id);
+await bz.logoutInstance(inst.id);          // exige novo QR
+await bz.clearInstanceSession(inst.id);    // pareamento travado: apaga a credencial do dispositivo
+
+// Arquivar mantém o histórico; `archived: "1"` lista os arquivados.
+await bz.archiveInstance(inst.id);
+const archived = await bz.listInstances({ archived: "1" });
+await bz.unarchiveInstance(inst.id);
+
+// Rede, filtros de entrada e privacidade.
+await bz.setInstanceProxy(inst.id, { proxy_url: "http://user:pass@proxy.example:8080" });
+await bz.setInboundFilters(inst.id, { ignore_groups: true, ignore_status: true });
+await bz.setPrivacy(inst.id, { setting: "last", value: "contacts" });
+
+await bz.deleteInstance(inst.id); // encerra a sessão e remove
+await bz.getHealth();             // { status: "ok", version }
+```
+
+### API oficial (WhatsApp Cloud API)
+
+```ts
+await bz.connectOfficialAccount({ waba_id: "…", phone_number_id: "…", access_token: "…" });
+const official = await bz.getOfficialAccount();
+await bz.disconnectOfficialAccount();
+```
+
+### Pools (rotação entre números)
+
+```ts
+const pool = await bz.createPool({ name: "Vendas", strategy: "health_weighted" });
+await bz.addPoolNumber(pool.id, { instance_id: inst.id });
+await bz.getPool(pool.id);
+const { data: pools } = await bz.listPools();
+await bz.sendText({ to: "+5511999999999", body: "Oi!", pool_id: pool.id });
 ```
 
 ### Perfil do número (white-label)
@@ -290,6 +355,27 @@ console.log(invite.invite_link);
 await bz.previewGroupInvite(inst.id, { code: "AbCdEf123456" }); // nome/tamanho SEM entrar
 await bz.joinGroup(inst.id, { code: "AbCdEf123456" });
 await bz.leaveGroup(group.jid, inst.id);
+
+await bz.updateGroup(group.jid, inst.id, { name: "Equipe", announce: true });
+const fresh = await bz.groupInvite(group.jid, inst.id, { reset: true }); // revoga o link antigo
+await bz.listJoinRequests(group.jid, inst.id);
+await bz.updateJoinRequests(group.jid, inst.id, { participants: ["+5511988887777"], approve: true });
+```
+
+### Chats, etiquetas, bloqueio e chamadas
+
+```ts
+await bz.muteChat(jid, { instance_id: inst.id, on: true });
+const label = await bz.createLabel({ instance_id: inst.id, name: "VIP" });
+await bz.applyChatLabel(jid, { instance_id: inst.id, label_id: label.id!, apply: true });
+await bz.listLabels(inst.id);
+await bz.deleteLabel(label.id!, inst.id);
+
+await bz.blockContact("5511988887777@s.whatsapp.net", { instance_id: inst.id });
+await bz.getBlocklist(inst.id);
+await bz.unblockContact("5511988887777@s.whatsapp.net", { instance_id: inst.id });
+
+await bz.rejectCall({ instance_id: inst.id, call_from: "5511988887777@s.whatsapp.net", call_id: "…" });
 ```
 
 ### Contatos
@@ -300,6 +386,78 @@ const { data } = await bz.contactsCheck({
   phones: ["+5511988887777", "+5511977776666"],
 });
 for (const c of data) console.log(c.query, c.in_whatsapp, c.jid);
+```
+
+### Base de contatos (CRM), tags, grupos e supressão
+
+O vínculo contato ↔ projeto/número é mantido **automaticamente** pela API; os filtros só leem.
+
+```ts
+const page = await bz.listContacts({ tags: ["vip"], status: "active", has_email: true, limit: 50 });
+const contact = await bz.createContact({ phone: "+5511988887777", name: "Ana", email: "ana@exemplo.com" });
+await bz.updateContact(contact.id!, { address: { city: "São Paulo", state: "SP" } });
+await bz.getContactHistory(contact.id!, { limit: 20 });
+await bz.addContactNote(contact.id!, { body: "Pediu retorno à tarde" });
+
+await bz.createTag({ key: "vip", name: "VIP" });
+await bz.mutateContactTags(contact.id!, { add: ["vip"] });
+await bz.createContactGroup({ key: "clientes", name: "Clientes" });
+await bz.mutateContactGroups(contact.id!, { add: ["clientes"] });
+
+await bz.optOutContact(contact.id!);   // LGPD
+await bz.optInContact(contact.id!);
+await bz.createSuppression({ phone: "+5511977776666", reason: "pediu" });
+await bz.deleteSuppression("+5511977776666");
+await bz.deleteContact(contact.id!);
+```
+
+## Campanhas
+
+```ts
+const camp = await bz.createCampaign({
+  name: "Black Friday",
+  pacing_profile: "conservative",
+  variations: [{ body: "Oi {nome}! {Oferta|Promoção} só hoje." }],
+});
+await bz.addCampaignRecipients(camp.id, { contact_filter: { tags: ["vip"] } });
+await bz.getCampaignEligibility();          // números aptos (conexão + aquecimento)
+const dry = await bz.dryRunCampaign(camp.id);
+console.log(dry.estimated_human, dry.warnings);
+await bz.startCampaign(camp.id);
+await bz.pauseCampaign(camp.id);
+await bz.resumeCampaign(camp.id);
+
+// Imagem de cabeçalho (multipart).
+import { fileFromPath } from "@bzapper/client";
+const { url } = await bz.uploadCampaignMedia(await fileFromPath("./banner.png", "image/png"));
+```
+
+## Projetos, marca, conta e usuários
+
+```ts
+const proj = await bz.createProject({ name: "Loja 2" });
+await bz.updateProject(proj.id, { name: "Loja SP", color: "#0a7" });
+await bz.getProjectsHealth();                       // semáforo de números por projeto
+await bz.setProjectBrand(proj.id, { about: "Atendimento Loja SP" });
+await bz.uploadProjectLogo(proj.id, { content: bytes, filename: "logo.png", contentType: "image/png" });
+await bz.uploadBrandLogo(await fileFromPath("./logo.png", "image/png"));
+
+const me = await bz.getMe();
+await bz.updateProfile({ name: "Ana", job_title: "Suporte" });
+await bz.updateAccount({ name: "Minha Empresa" });
+await bz.inviteUser({ email: "joao@exemplo.com", role: "agent" });
+```
+
+## Plano, add-ons e faturas
+
+```ts
+const ent = await bz.getMyEntitlements();
+await bz.upgradePlan();                               // Pro no carrinho
+await bz.changeAddon({ kind: "number", delta: 2 });   // +2 números
+const cart = await bz.getAddonCart();
+const { client_secret } = await bz.checkoutAddonCart({ save_card: true });
+const { data: invoices } = await bz.listMyInvoices();
+await bz.getPricing();
 ```
 
 ## API keys (self-serve)
@@ -550,29 +708,57 @@ const usage = await bz.getUsage({
 console.log(usage.total, usage.delivery_rate);
 ```
 
-## Tratamento de erro
+## Erros, novas tentativas e idempotência
 
-Em qualquer resposta não-2xx o SDK lança `BzapperError`. **Ramifique sempre pelo `code`** (estável), nunca pelo `message` (texto traduzido).
+Em qualquer resposta não-2xx o SDK lança `BzapperError` (ou uma subclasse). **Ramifique sempre
+pelo `code`** (estável), nunca pelo `message` (texto traduzido).
+
+| Status | Classe | |
+|---|---|---|
+| 400, 422 | `ValidationError` | corpo/parâmetro inválido |
+| 401 | `AuthenticationError` | key inválida/revogada (`connect_revoked`) |
+| 403 | `PermissionDeniedError` | `requiredScope` diz o escopo que faltou |
+| 404 | `NotFoundError` | |
+| 409 | `ConflictError` | ex.: `instance_not_connected`, `idempotency_in_progress` |
+| 429 | `RateLimitError` | `retryAfter` em segundos |
+| 5xx | `ServerError` | |
+| sem resposta | `NetworkError` | `status = 0`, `code = "NETWORK_ERROR"` |
+| outro (ex.: 402) | `BzapperError` | ex.: `connect_suspended` |
+
+Todas herdam de `BzapperError`, com: `code`, `message`, `status` (= `statusCode`), `locale`,
+`requestId` (informe ao suporte), `retryAfter`, `requiredScope` e `body` (corpo decodificado).
+Resposta 2xx que não é JSON vira `code = "INVALID_RESPONSE"`. Id de caminho vazio, `"."` ou `".."`
+é recusado com `TypeError` antes de qualquer requisição.
 
 ```ts
-import { Bzapper, BzapperError } from "@bzapper/client";
+import { Bzapper, BzapperError, RateLimitError } from "@bzapper/client";
 
 try {
   await bz.sendText({ to: "+5511999999999", body: "Olá!" });
 } catch (err) {
-  if (err instanceof BzapperError) {
-    console.error(err.code);       // ex.: "not_connected", "rate_limited"
-    console.error(err.statusCode); // ex.: 409, 429
-    console.error(err.message);    // texto humano (não dê parse)
-
-    if (err.code === "rate_limited") {
-      // backoff e retry...
-    }
+  if (err instanceof RateLimitError) {
+    console.error(`aguarde ${err.retryAfter}s`);
+  } else if (err instanceof BzapperError) {
+    console.error(err.code, err.status, err.requestId); // ex.: "instance_not_connected" 409 "a1b2…"
     // Key de bZapper Connect: "connect_suspended" (402) e "connect_revoked" (401).
   } else {
     throw err;
   }
 }
+```
+
+**Novas tentativas:** o SDK tenta de novo sozinho em erro de rede/timeout, `429`, `502`, `503` e
+`504` (nada mais — um `500` ou `4xx` volta na hora), até `maxRetries` vezes (padrão 2), esperando o
+`Retry-After` (teto 60 s) ou `min(8, 0,5 × 2^n)` s + até 25% de jitter.
+
+**Idempotência:** toda escrita (POST/PUT/PATCH/DELETE) leva um `Idempotency-Key` gerado por
+chamada e **repetido** nas novas tentativas (com o mesmo `X-Request-Id`) — a API devolve a mesma
+resposta sem refazer a operação (`Idempotent-Replayed: true`). Para tornar segura a repetição
+entre execuções (um job que pode rodar duas vezes), passe a sua chave:
+
+```ts
+await bz.sendText({ to: "+5511999999999", body: "Pedido #42 confirmado" }, { idempotencyKey: "pedido-42" });
+await bz.createContact({ phone: "+5511999999999" }, { idempotencyKey: "crm-import-42" });
 ```
 
 ## Exemplo rodável

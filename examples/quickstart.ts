@@ -51,7 +51,7 @@ async function main() {
   } catch (err) {
     if (err instanceof BzapperError) {
       // SEMPRE ramifique pelo `code` estável, nunca pelo texto.
-      console.error(`[${err.statusCode}] ${err.code}: ${err.message}`);
+      console.error(`[${err.status}] ${err.code}: ${err.message} (request_id: ${err.requestId})`);
       if (err.code === "rate_limited") {
         console.error("Aguarde antes de tentar novamente.");
       }

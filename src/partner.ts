@@ -1,4 +1,4 @@
-import { HttpTransport, type Query } from "./http.js";
+import { HttpTransport, encodePath as p, type Query, type RequestOptions, type SleepFn } from "./http.js";
 import type {
   ConnectSession,
   CreateConnectSessionParams,
@@ -29,6 +29,13 @@ export interface BzapperPartnerOptions {
   timeout?: number;
   /** Implementação de fetch (default: fetch global do Node 18+). */
   fetch?: typeof fetch;
+  /**
+   * Novas tentativas além da primeira (erro de rede/timeout, 429, 502, 503, 504).
+   * Default 2. `0` desliga.
+   */
+  maxRetries?: number;
+  /** Espera entre tentativas (substituível em testes). Default: `setTimeout`. */
+  sleep?: SleepFn;
 }
 
 /**
@@ -68,12 +75,14 @@ export class BzapperPartner {
       locale: options.locale,
       timeout: options.timeout,
       fetch: options.fetch,
+      maxRetries: options.maxRetries,
+      sleep: options.sleep,
     });
   }
 
-  /** Identidade do parceiro (de quem é o partner secret). `GET /partner/me` */
-  me(): Promise<Partner> {
-    return this.http.request("GET", "/partner/me");
+  /** Identidade do parceiro (de quem é o partner secret). `GET /partner/me` (operationId `getPartnerMe`) */
+  async me(options?: RequestOptions): Promise<Partner> {
+    return this.http.call({ method: "GET", path: "/partner/me" }, options);
   }
 
   /**
@@ -85,8 +94,8 @@ export class BzapperPartner {
    * senha, captcha nem confirmação de e-mail (exceto se o e-mail já tiver conta —
    * aí o componente pede um código enviado a ele).
    */
-  createConnectSession(params: CreateConnectSessionParams): Promise<ConnectSession> {
-    return this.http.request("POST", "/partner/connect-sessions", params);
+  async createConnectSession(params: CreateConnectSessionParams, options?: RequestOptions): Promise<ConnectSession> {
+    return this.http.call({ method: "POST", path: "/partner/connect-sessions", body: params }, options);
   }
 
   /**
@@ -96,19 +105,22 @@ export class BzapperPartner {
    * A resposta traz a key **crua** (`api_key`, `bz_live_...`) — guarde; ela não é
    * mostrada de novo (use `rotateConnectionKey` se perder).
    */
-  exchangeCode(code: string): Promise<PartnerConnectionWithKey> {
-    return this.http.request("POST", "/partner/connect/exchange", { code });
+  async exchangeCode(code: string, options?: RequestOptions): Promise<PartnerConnectionWithKey> {
+    return this.http.call({ method: "POST", path: "/partner/connect/exchange", body: { code } }, options);
   }
 
   /** Lista suas conexões (filtro por `external_id` / `status`). `GET /partner/connections` */
-  listConnections(params: ListPartnerConnectionsParams = {}): Promise<PartnerConnectionList> {
+  async listConnections(
+    params: ListPartnerConnectionsParams = {},
+    options?: RequestOptions,
+  ): Promise<PartnerConnectionList> {
     const query: Query = { external_id: params.external_id, status: params.status };
-    return this.http.request("GET", "/partner/connections", undefined, query);
+    return this.http.call({ method: "GET", path: "/partner/connections", query }, options);
   }
 
   /** Detalha uma conexão (status, conta, números). `GET /partner/connections/{id}` */
-  getConnection(id: string): Promise<PartnerConnection> {
-    return this.http.request("GET", `/partner/connections/${encodeURIComponent(id)}`);
+  async getConnection(id: string, options?: RequestOptions): Promise<PartnerConnection> {
+    return this.http.call({ method: "GET", path: `/partner/connections/${p(id)}` }, options);
   }
 
   /**
@@ -117,19 +129,16 @@ export class BzapperPartner {
    *
    * Responde 409 `connection_not_active` se a conexão não foi concluída ou foi revogada.
    */
-  rotateConnectionKey(id: string): Promise<PartnerConnectionWithKey> {
-    return this.http.request(
-      "POST",
-      `/partner/connections/${encodeURIComponent(id)}/rotate-key`,
-    );
+  async rotateConnectionKey(id: string, options?: RequestOptions): Promise<PartnerConnectionWithKey> {
+    return this.http.call({ method: "POST", path: `/partner/connections/${p(id)}/rotate-key` }, options);
   }
 
   /**
    * Encerra uma conexão (revoga a key; NÃO cancela o plano do cliente).
    * Um webhook `connect.revoked` é enviado. `DELETE /partner/connections/{id}`
    */
-  revokeConnection(id: string): Promise<void> {
-    return this.http.request("DELETE", `/partner/connections/${encodeURIComponent(id)}`);
+  async revokeConnection(id: string, options?: RequestOptions): Promise<void> {
+    return this.http.call({ method: "DELETE", path: `/partner/connections/${p(id)}` }, options);
   }
 }
 

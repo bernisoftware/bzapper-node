@@ -3,6 +3,8 @@
  * Espelham a fonte única `packages/sdk/openapi.yaml`.
  */
 
+import type { RequestOptions } from "./http.js";
+
 // ---------------------------------------------------------------------------
 // Enums / unions
 // ---------------------------------------------------------------------------
@@ -70,7 +72,7 @@ export interface SendBase {
 /**
  * Opções de requisição dos envios (2º argumento opcional de `send*`).
  */
-export interface SendOptions {
+export interface SendOptions extends RequestOptions {
   /**
    * Vai no header `Idempotency-Key` (até 255 caracteres). Repetir o envio com a
    * mesma chave em 24h (mesma conta) devolve a MESMA resposta, sem reenviar —
@@ -197,6 +199,10 @@ export interface MessageQueued {
   message_id: string;
   status: "queued";
   client_reference?: string;
+  /** Presente quando o envio foi agendado (`scheduled_at`). */
+  scheduled_id?: string;
+  /** Instante agendado (RFC3339), quando houver. */
+  scheduled_at?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +220,14 @@ export interface Instance {
   /** Quando um ban TEMPORÁRIO expira (o número reconecta sozinho); ausente = permanente ou sem ban. */
   banned_until?: string | null;
   proxy_url?: string;
+  tenant_id?: string;
+  project_id?: string;
+  /** Início do aquecimento do número. */
+  warming_started_at?: string;
+  /** Saúde do número (0–100). */
+  health_score?: number;
+  /** Preenchido quando o número está arquivado. */
+  archived_at?: string;
   created_at?: string;
   updated_at?: string;
   /**
@@ -513,6 +527,8 @@ export interface ProjectList {
 }
 export interface CreateProjectParams {
   name: string;
+  /** Trilho do projeto (imutável depois de criado). */
+  api_mode?: "UNOFFICIAL" | "OFFICIAL";
 }
 
 /** Usuário da conta. role `admin` (tudo) ou `agent` (membro — sem faturamento). */
@@ -546,9 +562,26 @@ export interface ContactRecord {
   instance_id?: string;
   message_count: number;
   last_message_at?: string;
+  email?: string;
+  document?: string;
+  document_type?: string;
+  address?: ContactAddress;
+  status?: ContactStatus;
+  status_reason?: string;
+  source?: "inbound" | "outbound" | "api" | "import" | "widget";
+  opted_out_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  /** Chaves das tags do contato. */
+  tags?: string[];
+  /** Chaves dos grupos de contato. */
+  groups?: string[];
 }
 export interface ContactRecordList {
   data: ContactRecord[];
+  total?: number;
+  limit?: number;
+  offset?: number;
 }
 export interface ListContactsParams {
   search?: string;
@@ -560,6 +593,26 @@ export interface ListContactsParams {
    */
   instance_id?: string;
   limit?: number;
+  /** Chaves de tag (enviadas como CSV). */
+  tags?: string[];
+  /** `any` (padrão) ou `all` das `tags`. */
+  tags_match?: "any" | "all";
+  /** Chaves de grupos de contato (enviadas como CSV). */
+  groups?: string[];
+  status?: ContactStatus;
+  city?: string;
+  state?: string;
+  country?: string;
+  zip?: string;
+  document?: string;
+  has_email?: boolean;
+  /** RFC3339 (ou `Date`). */
+  last_activity_after?: string | Date;
+  last_activity_before?: string | Date;
+  created_after?: string | Date;
+  created_before?: string | Date;
+  sort?: "last_activity" | "name" | "created";
+  offset?: number;
 }
 
 /** Filtro opcional de {@link BzapperClient.listInstances}. */
@@ -569,6 +622,8 @@ export interface ListInstancesParams {
    * números da conta. Omita para usar o projeto ativo (X-Project-Id).
    */
   project_id?: string;
+  /** `"1"` lista os números ARQUIVADOS do projeto ativo em vez dos ativos. */
+  archived?: "1";
 }
 
 /** Identidade dos números (kit de marca + "Sobre"). Vive no projeto. */
@@ -612,6 +667,13 @@ export interface Scheduled {
   scheduled_at: string;
   status: "pending" | "claimed" | "promoted" | "canceled" | "failed";
   message_id?: string;
+  tenant_id?: string;
+  project_id?: string;
+  /** O envio original, como foi pedido. */
+  request?: Record<string, unknown>;
+  error?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -876,4 +938,521 @@ export interface ConnectSession {
 export interface ListPartnerConnectionsParams {
   external_id?: string;
   status?: ConnectionStatus;
+}
+
+// ---------------------------------------------------------------------------
+// Adições do padrão Berni r2 (0.7): todas as operações da spec
+// ---------------------------------------------------------------------------
+
+/** Paginação simples por quantidade (`?limit=`). */
+export interface LimitParams {
+  /** Máximo de itens. */
+  limit?: number;
+}
+
+/** Parâmetros de `groupInvite`. */
+export interface GroupInviteParams {
+  /** `true` revoga o link atual e gera um novo. */
+  reset?: boolean;
+}
+
+// ----- Identidade / conta -----
+
+/** Identidade autenticada (+ perfil quando é sessão de usuário). `GET /me` */
+export interface Me {
+  tenant_id?: string;
+  user_id?: string;
+  email?: string;
+  name?: string;
+  phone?: string;
+  job_title?: string;
+  avatar_url?: string;
+  role?: "admin" | "agent" | "super_admin";
+  scopes?: string[];
+  locale?: string;
+  tenant_name?: string;
+  is_platform_admin?: boolean;
+  bfocus?: { user_external_id?: string; customer_external_id?: string; user_hash?: string };
+}
+
+/** `PATCH /me` */
+export interface UpdateProfileParams {
+  name?: string;
+  phone?: string;
+  job_title?: string;
+  locale?: string;
+}
+
+/** `PATCH /account` */
+export interface UpdateAccountParams {
+  /** Nome da empresa (conta). */
+  name: string;
+}
+
+export interface AccountUpdated {
+  tenant_name: string;
+}
+
+/** Resultado de upload de logo. */
+export interface LogoUploaded {
+  logo_url?: string;
+}
+
+// ----- Projetos -----
+
+/** `PATCH /projects/{id}` */
+export interface UpdateProjectParams {
+  name: string;
+  logo_url?: string;
+  color?: string;
+}
+
+export interface ProjectHealth {
+  project_id?: string;
+  total?: number;
+  /** Contagem por status do número. */
+  statuses?: Record<string, number>;
+}
+
+export interface ProjectHealthList {
+  data?: ProjectHealth[];
+}
+
+// ----- Contatos (CRM) -----
+
+export type ContactStatus = "active" | "pending_validation" | "opted_out" | "blocked" | "unreachable";
+
+export interface ContactAddress {
+  street?: string;
+  number?: string;
+  complement?: string;
+  district?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
+}
+
+/** `POST /contacts` */
+export interface CreateContactParams {
+  /** `+DDIdigits` (E.164 sem espaços). */
+  phone: string;
+  name?: string;
+  email?: string;
+  document?: string;
+  document_type?: string;
+  address?: ContactAddress;
+}
+
+/** `PATCH /contacts/{id}` — só os campos enviados mudam. */
+export interface UpdateContactParams {
+  name?: string;
+  email?: string;
+  document?: string;
+  document_type?: string;
+  address?: ContactAddress;
+}
+
+export interface ContactHistoryItem {
+  kind: "message" | "event";
+  type?: string;
+  direction?: "" | "inbound" | "outbound";
+  status?: string;
+  actor?: string;
+  payload?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ContactHistoryList {
+  data: ContactHistoryItem[];
+}
+
+/** `POST /contacts/{id}/notes` */
+export interface ContactNoteParams {
+  body: string;
+}
+
+/** Adiciona/remove chaves de tag ou de grupo de contato. */
+export interface TaxonMutationParams {
+  add?: string[];
+  remove?: string[];
+}
+
+/** Tag ou grupo de contato. */
+export interface Taxon {
+  id: string;
+  key: string;
+  name: string;
+  color?: string;
+  count?: number;
+  created_at?: string;
+}
+
+export interface TaxonList {
+  data: Taxon[];
+}
+
+export interface TaxonRef {
+  id: string;
+  key: string;
+}
+
+/** `POST /tags` e `POST /contact-groups` */
+export interface CreateTaxonParams {
+  key: string;
+  name?: string;
+  color?: string;
+}
+
+export interface Suppression {
+  id: string;
+  phone: string;
+  reason?: string;
+  source?: string;
+  created_at?: string;
+}
+
+export interface SuppressionList {
+  data: Suppression[];
+}
+
+/** `POST /suppressions` */
+export interface CreateSuppressionParams {
+  /** `+DDIdigits`. */
+  phone: string;
+  reason?: string;
+}
+
+// ----- Cobrança -----
+
+export interface Entitlements {
+  currency?: string;
+  project_free_count?: number;
+  plan_code?: string;
+  plan_name?: string;
+  status?: string;
+  gated?: boolean;
+  plan?: string;
+  plan_renews_at?: string;
+  plan_monthly_cents?: number;
+  plan_cancel_at?: string;
+  addon_numbers?: number;
+  addon_numbers_next?: number;
+  addon_projects?: number;
+  addon_projects_next?: number;
+  addon_storage_gb?: number;
+  addon_storage_gb_next?: number;
+  addon_retention_blocks?: number;
+  addon_retention_blocks_next?: number;
+  addon_number_cents?: number;
+  addon_project_cents?: number;
+  addon_storage_gb_cents?: number;
+  addon_retention_block_cents?: number;
+  max_projects?: number;
+  max_numbers_per_project?: number;
+  max_users?: number;
+  max_api_keys?: number;
+  storage_mb?: number;
+  media_retention_days?: number;
+  message_retention_days?: number;
+  rate_limit_rps?: number;
+  sends_included?: number;
+  sends_used?: number;
+  messages_used?: number;
+  message_free_count?: number;
+  number_free_count?: number;
+  storage_free_mb?: number;
+  retention_free_days?: number;
+}
+
+export interface AddonCart {
+  plan_pro?: boolean;
+  pro_monthly_cents?: number;
+  numbers?: number;
+  projects?: number;
+  storage_gb?: number;
+  retention_blocks?: number;
+  campaigns?: number;
+  schedule_year?: number;
+  prorated_cents?: number;
+  currency?: string;
+  empty?: boolean;
+}
+
+export type AddonKind = "number" | "project" | "storage_gb" | "retention_block" | "campaigns" | "schedule_year";
+
+/** `POST /me/addons` */
+export interface ChangeAddonParams {
+  kind: AddonKind;
+  /** +N adiciona, −N remove (toggles: 0/1). */
+  delta: number;
+}
+
+/** `POST /me/addons/cart/checkout` */
+export interface CheckoutAddonCartParams {
+  save_card?: boolean;
+}
+
+export interface CheckoutResult {
+  client_secret?: string;
+  invoice_id?: string;
+}
+
+export interface PlanSummary {
+  plan?: string;
+  status?: "active" | "past_due" | "grace" | "canceling";
+  renews_at?: string | null;
+  cancel_at?: string | null;
+  grace_until?: string | null;
+  recurring?: boolean;
+  currency?: string;
+}
+
+export interface InvoiceItem {
+  kind?: "plan" | "addon";
+  addon_kind?: string;
+  description?: string;
+  qty?: number;
+  unit_amount_cents?: number;
+  amount_cents?: number;
+  proration?: boolean;
+  period_start?: string;
+  period_end?: string;
+}
+
+export interface Invoice {
+  id?: string;
+  number?: number;
+  currency?: string;
+  status?: "open" | "awaiting_payment" | "paid" | "failed" | "void";
+  reason?: "initial" | "addon" | "renewal";
+  recurring?: boolean;
+  subtotal_cents?: number;
+  total_cents?: number;
+  period_start?: string;
+  period_end?: string;
+  issue_date?: string;
+  due_date?: string;
+  paid_at?: string;
+  items?: InvoiceItem[];
+}
+
+export interface InvoiceList {
+  data?: Invoice[];
+}
+
+export interface PayInvoiceResult {
+  client_secret?: string;
+}
+
+export interface BillingConfig {
+  publishable_key?: string;
+  enabled?: boolean;
+}
+
+export interface Pricing {
+  retention_free_days?: number;
+  plans?: Record<string, unknown>;
+  currencies?: Record<string, unknown>;
+}
+
+// ----- Avançado (mensagens, privacidade, etiquetas, chamadas) -----
+
+/** `PATCH /messages/{id}` */
+export interface EditMessageParams {
+  text: string;
+}
+
+/** `DELETE /messages/{id}` */
+export interface RevokeMessageParams {
+  for_everyone?: boolean;
+}
+
+/** `POST /messages/forward` */
+export interface ForwardMessageParams {
+  instance_id: string;
+  to: string;
+  from_chat: string;
+  wa_message_id: string;
+}
+
+/** `POST /messages/{id}/read` */
+export interface MarkReadParams {
+  instance_id: string;
+  chat: string;
+  wa_message_ids?: string[];
+  sender?: string;
+}
+
+/** `PATCH /instances/{id}/privacy` */
+export interface SetPrivacyParams {
+  setting: string;
+  value: string;
+}
+
+/** `POST /chats/{jid}/labels` */
+export interface ApplyChatLabelParams {
+  instance_id: string;
+  label_id: string;
+  apply?: boolean;
+}
+
+export interface Label {
+  id?: string;
+  name?: string;
+  color?: string;
+}
+
+export interface LabelList {
+  data?: Label[];
+}
+
+/** `POST /labels` */
+export interface CreateLabelParams {
+  instance_id: string;
+  name: string;
+  color?: string;
+}
+
+/** Corpo com só o número (`instance_id`). */
+export interface InstanceParams {
+  instance_id: string;
+}
+
+/** `POST /calls/reject` */
+export interface RejectCallParams {
+  instance_id: string;
+  call_from: string;
+  call_id: string;
+}
+
+/** `POST /calls/offer` */
+export interface OfferCallParams {
+  instance_id: string;
+  to: string;
+  video?: boolean;
+}
+
+// ----- Números -----
+
+/** Filtros de entrada do número. */
+export interface InboundFilters {
+  ignore_broadcast?: boolean;
+  ignore_status?: boolean;
+  ignore_groups?: boolean;
+  group_allowlist?: string[];
+  group_denylist?: string[];
+}
+
+/** `PATCH /instances/{id}/proxy` */
+export interface SetProxyParams {
+  proxy_url: string;
+}
+
+export interface Health {
+  status: "ok" | "degraded";
+  version: string;
+}
+
+// ----- Grupos -----
+
+/** `PATCH /groups/{jid}` */
+export interface UpdateGroupParams {
+  name?: string;
+  topic?: string;
+  announce?: boolean;
+  locked?: boolean;
+}
+
+/** `POST /groups/{jid}/join-requests` */
+export interface UpdateJoinRequestsParams {
+  participants: string[];
+  approve: boolean;
+}
+
+// ----- API oficial (WhatsApp Cloud API) -----
+
+export type OfficialAccountStatus = "PENDENTE" | "AGUARDANDO_PAGAMENTO" | "ATIVA" | "SUSPENSA";
+
+export interface OfficialAccount {
+  id?: string;
+  tenant_id?: string;
+  project_id?: string;
+  waba_id?: string;
+  phone_number_id?: string;
+  display_number?: string;
+  verified_name?: string;
+  status?: OfficialAccountStatus;
+  status_reason?: string;
+  quality_rating?: string;
+  messaging_limit?: string;
+  source?: "embedded_signup" | "manual";
+}
+
+/** `POST /official/account` */
+export interface ConnectOfficialAccountParams {
+  waba_id: string;
+  phone_number_id: string;
+  access_token: string;
+  display_number?: string;
+  verified_name?: string;
+  status?: "PENDENTE" | "AGUARDANDO_PAGAMENTO" | "ATIVA";
+}
+
+// ----- Campanhas -----
+
+export interface NumberEligibility {
+  instance_id?: string;
+  phone?: string;
+  nickname?: string;
+  status?: string;
+  connected_days?: number;
+  health?: number;
+  eligible?: boolean;
+  reason?: string;
+}
+
+export interface CampaignEligibility {
+  warmup_days?: number;
+  min_numbers?: number;
+  eligible_count?: number;
+  can_dispatch?: boolean;
+  reason?: string;
+  numbers?: NumberEligibility[];
+}
+
+/** `GET /campaigns/eligibility` */
+export interface CampaignEligibilityParams {
+  pool_id?: string;
+}
+
+export interface MediaUploaded {
+  url?: string;
+}
+
+// ----- Pools -----
+
+export type PoolStrategy = "round_robin" | "least_used" | "health_weighted";
+
+export interface Pool {
+  id: string;
+  tenant_id: string;
+  name?: string;
+  strategy: PoolStrategy;
+  is_default?: boolean;
+  /** instance_ids dos números do pool. */
+  members?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PoolList {
+  data: Pool[];
+}
+
+/** `POST /pools` */
+export interface CreatePoolParams {
+  name?: string;
+  strategy?: PoolStrategy;
+  is_default?: boolean;
 }

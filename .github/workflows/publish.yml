@@ -1,11 +1,36 @@
 # Publica @bzapper/client no npmjs ao dar push de uma tag vX.Y.Z no repo público
 # bernisoftware/bzapper-node. Requer secret NPM_TOKEN (Automation token do org @bzapper).
+#
+# Só publica com a suíte verde (conformidade + unitários) no Node mínimo (18) e atual (22),
+# rodando contra o artefato CONSTRUÍDO (os testes importam "@bzapper/client" → dist/), e com a
+# tag igual à versão do package.json.
 name: publish
 on:
   push:
     tags: ['v*']
+
+permissions:
+  contents: read
+
 jobs:
+  test:
+    name: test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        node: ['18', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: npm test
+
   npm:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -16,8 +41,17 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+      - name: tag == package.json
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag v$TAG não bate com package.json ($PKG)"
+            exit 1
+          fi
       - run: npm install
       - run: npm run build
+      - run: npm test
       - run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

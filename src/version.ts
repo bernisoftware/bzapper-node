@@ -3,7 +3,7 @@
 //
 // Não é cosmética: vai no header X-Bzapper-Client de toda requisição, e é por
 // ele que a API sabe a quem avisar quando uma correção exige atualizar o código.
-export const VERSION = '0.6.2';
+export const VERSION = '0.7.0';
 
 /** Identificação enviada em X-Bzapper-Client. */
 export const CLIENT_ID = `bzapper-node/${VERSION}`;
