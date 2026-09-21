@@ -51,6 +51,7 @@ export const EVENT_TYPES = [
   "instance.warming",
   "instance.status",
   "group.joined",
+  "group.left",
   "group.participant_added",
   "group.participant_removed",
   "group.participant_promoted",
@@ -58,6 +59,22 @@ export const EVENT_TYPES = [
   "group.subject_changed",
   "group.description_changed",
 ] as const;
+
+/**
+ * bZapper Connect lifecycle events, delivered to the **partner** webhook (signed
+ * with the partner's webhook secret, same HMAC scheme). The partner also
+ * receives the regular events above for its active connections — every
+ * partner delivery carries {@link WebhookEvent.connection}.
+ */
+export const CONNECT_EVENT_TYPES = [
+  "connect.completed",
+  "connect.suspended",
+  "connect.resumed",
+  "connect.revoked",
+] as const;
+
+/** A bZapper Connect lifecycle event type (see {@link CONNECT_EVENT_TYPES}). */
+export type ConnectEventType = (typeof CONNECT_EVENT_TYPES)[number];
 
 /** Raw HTTP body of a webhook delivery, as received (never re-serialized). */
 export type RawBody = string | Buffer;
@@ -80,7 +97,24 @@ export interface WebhookGroup {
 export interface WebhookSender {
   jid?: string;
   lid?: string;
+  /** Phone (+DDIdigits) when known; absent if the person only arrived by @lid. */
+  phone?: string;
   name?: string;
+}
+
+/**
+ * Which connection (which of the partner's customers) a partner delivery refers
+ * to. Only present on bZapper Connect partner webhooks.
+ */
+export interface WebhookConnection {
+  id: string;
+  /** The customer id in the partner's system. */
+  externalId: string;
+  /** The customer's bZapper account (tenant). */
+  accountId?: string;
+  projectId?: string;
+  /** Connection status, e.g. `active`, `suspended`, `revoked`. */
+  status: string;
 }
 
 /** A parsed, typed webhook event (the delivered envelope). */
@@ -96,8 +130,18 @@ export interface WebhookEvent {
   sender?: WebhookSender;
   mentions: string[];
   payload: Record<string, unknown>;
+  /** bZapper Connect: the connection this partner delivery refers to. */
+  connection?: WebhookConnection;
   /** The original parsed JSON envelope (snake_case keys), untouched. */
   raw: Record<string, unknown>;
+}
+
+/** A partner (bZapper Connect) delivery — always carries `connection`. */
+export type PartnerWebhookEvent = WebhookEvent & { connection: WebhookConnection };
+
+/** `true` iff the event type is a Connect lifecycle event (`connect.*`). */
+export function isConnectEvent(event: Pick<WebhookEvent, "type">): boolean {
+  return (CONNECT_EVENT_TYPES as readonly string[]).includes(event.type);
 }
 
 /** A webhook event handler. May be sync or async. */
@@ -147,6 +191,17 @@ function toEvent(envelope: Record<string, unknown>): WebhookEvent {
   const mentions = Array.isArray(envelope.mentions)
     ? (envelope.mentions as unknown[]).map(String)
     : [];
+  const c = envelope.connection;
+  const connection =
+    c && typeof c === "object"
+      ? {
+          id: ((c as Record<string, unknown>).id as string | undefined) ?? "",
+          externalId: ((c as Record<string, unknown>).external_id as string | undefined) ?? "",
+          accountId: (c as Record<string, unknown>).account_id as string | undefined,
+          projectId: (c as Record<string, unknown>).project_id as string | undefined,
+          status: ((c as Record<string, unknown>).status as string | undefined) ?? "",
+        }
+      : undefined;
   const payload =
     envelope.payload && typeof envelope.payload === "object"
       ? (envelope.payload as Record<string, unknown>)
@@ -161,6 +216,7 @@ function toEvent(envelope: Record<string, unknown>): WebhookEvent {
     sender,
     mentions,
     payload,
+    connection,
     raw: envelope,
   };
 }

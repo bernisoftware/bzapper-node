@@ -1,9 +1,9 @@
-import { BzapperError } from "./error.js";
+import { DEFAULT_BASE_URL, HttpTransport, type Query } from "./http.js";
 import type {
   AccountUsage,
+  AdvisoryList,
   AccountUser,
   AccountUserList,
-  ApiErrorBody,
   ApiKeyCreated,
   ApiKeyList,
   BrandApplyResult,
@@ -42,6 +42,7 @@ import type {
   SendLocationParams,
   SendMediaParams,
   SendOTPParams,
+  SendOptions,
   Webhook,
   WebhookList,
   CreateWebhookParams,
@@ -63,10 +64,11 @@ import type {
   CampaignDryRun,
   CampaignEstimate,
   EstimateCampaignParams,
+  PartnerConnectionList,
 } from "./types.js";
 
 /** URL base padrão da API (produção). Sobrescreva só em dev/self-host. */
-export const DEFAULT_BASE_URL = "https://api.bzapper.com.br";
+export { DEFAULT_BASE_URL };
 
 /** Opções de construção do cliente. */
 export interface BzapperOptions {
@@ -86,8 +88,6 @@ export interface BzapperOptions {
   fetch?: typeof fetch;
 }
 
-type Query = Record<string, string | number | boolean | undefined>;
-
 /**
  * Cliente oficial, ergonômico e de alto nível do bZapper.
  *
@@ -100,27 +100,19 @@ type Query = Record<string, string | number | boolean | undefined>;
  * ```
  */
 export class Bzapper {
-  private readonly baseUrl: string;
-  private readonly apiKey: string;
-  private readonly locale?: string;
-  private readonly timeout: number;
-  private readonly fetchImpl: typeof fetch;
+  private readonly http: HttpTransport;
 
   constructor(options: BzapperOptions) {
     if (!options?.apiKey) throw new Error("Bzapper: `apiKey` é obrigatório.");
 
-    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-    this.apiKey = options.apiKey;
-    this.locale = options.locale;
-    this.timeout = options.timeout ?? 30_000;
-
-    const f = options.fetch ?? globalThis.fetch;
-    if (typeof f !== "function") {
-      throw new Error(
-        "Bzapper: `fetch` global indisponível. Use Node 18+ ou passe `fetch` nas opções.",
-      );
-    }
-    this.fetchImpl = f;
+    this.http = new HttpTransport({
+      label: "Bzapper",
+      token: options.apiKey,
+      baseUrl: options.baseUrl,
+      locale: options.locale,
+      timeout: options.timeout,
+      fetch: options.fetch,
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -128,8 +120,8 @@ export class Bzapper {
   // -------------------------------------------------------------------------
 
   /** Envia mensagem de texto. `POST /messages/text` */
-  sendText(params: SendTextParams): Promise<MessageQueued> {
-    return this.post("/messages/text", params);
+  sendText(params: SendTextParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/text", params, options);
   }
 
   /**
@@ -139,53 +131,53 @@ export class Bzapper {
    * destinatário copie o código em qualquer aparelho. Conta como 1 envio.
    * Sem `body`, a API gera o texto no idioma da conta, com variações.
    */
-  sendOTP(params: SendOTPParams): Promise<MessageQueued> {
-    return this.post("/messages/otp", params);
+  sendOTP(params: SendOTPParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/otp", params, options);
   }
 
   /** Envia imagem (url ou base64). `POST /messages/image` */
-  sendImage(params: SendMediaParams): Promise<MessageQueued> {
-    return this.post("/messages/image", params);
+  sendImage(params: SendMediaParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/image", params, options);
   }
 
   /** Envia vídeo. `POST /messages/video` */
-  sendVideo(params: SendMediaParams): Promise<MessageQueued> {
-    return this.post("/messages/video", params);
+  sendVideo(params: SendMediaParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/video", params, options);
   }
 
   /** Envia documento. `POST /messages/document` */
-  sendDocument(params: SendMediaParams): Promise<MessageQueued> {
-    return this.post("/messages/document", params);
+  sendDocument(params: SendMediaParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/document", params, options);
   }
 
   /** Envia áudio (use `media.ptt=true` para nota de voz). `POST /messages/audio` */
-  sendAudio(params: SendMediaParams): Promise<MessageQueued> {
-    return this.post("/messages/audio", params);
+  sendAudio(params: SendMediaParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/audio", params, options);
   }
 
   /** Envia sticker. `POST /messages/sticker` */
-  sendSticker(params: SendMediaParams): Promise<MessageQueued> {
-    return this.post("/messages/sticker", params);
+  sendSticker(params: SendMediaParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/sticker", params, options);
   }
 
   /** Envia localização. `POST /messages/location` */
-  sendLocation(params: SendLocationParams): Promise<MessageQueued> {
-    return this.post("/messages/location", params);
+  sendLocation(params: SendLocationParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/location", params, options);
   }
 
   /** Envia contato (vCard). `POST /messages/contact` */
-  sendContact(params: SendContactParams): Promise<MessageQueued> {
-    return this.post("/messages/contact", params);
+  sendContact(params: SendContactParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/contact", params, options);
   }
 
   /** Envia enquete. `POST /messages/poll` */
-  sendPoll(params: SendPollParams): Promise<MessageQueued> {
-    return this.post("/messages/poll", params);
+  sendPoll(params: SendPollParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/poll", params, options);
   }
 
   /** Reage a uma mensagem (requer `quoted_message_id`). `POST /messages/reaction` */
-  sendReaction(params: SendReactionParams): Promise<MessageQueued> {
-    return this.post("/messages/reaction", params);
+  sendReaction(params: SendReactionParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/reaction", params, options);
   }
 
   /**
@@ -194,8 +186,8 @@ export class Bzapper {
    * Caveat: botões não são confiáveis no WhatsApp (pior em grupo). A API
    * **sempre** envia um menu de texto numerado equivalente como fallback.
    */
-  sendButtons(params: SendButtonsParams): Promise<MessageQueued> {
-    return this.post("/messages/buttons", params);
+  sendButtons(params: SendButtonsParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/buttons", params, options);
   }
 
   /**
@@ -203,8 +195,8 @@ export class Bzapper {
    *
    * Caveat: pode cair para menu de texto numerado do lado do WhatsApp.
    */
-  sendList(params: SendListParams): Promise<MessageQueued> {
-    return this.post("/messages/list", params);
+  sendList(params: SendListParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/list", params, options);
   }
 
   // -------------------------------------------------------------------------
@@ -251,7 +243,7 @@ export class Bzapper {
   }
 
   /** Inicia (ou agenda) a campanha. `POST /campaigns/{id}/start` */
-  startCampaign(id: string): Promise<{ id: string; status: string }> {
+  startCampaign(id: string): Promise<{ id: string; status: string; start_at?: string; waiting?: string; starts_at?: string }> {
     return this.post(`/campaigns/${encodeURIComponent(id)}/start`);
   }
 
@@ -469,6 +461,15 @@ export class Bzapper {
   }
 
   /**
+   * Mostra o grupo de um convite (nome, descrição, tamanho) SEM entrar — para
+   * confirmar antes de colocar o número num grupo de terceiros.
+   * `POST /groups/join/preview?instance_id=`
+   */
+  previewGroupInvite(instanceId: string, params: JoinGroupParams): Promise<Group> {
+    return this.post("/groups/join/preview", params, { instance_id: instanceId });
+  }
+
+  /**
    * Adiciona/remove/promove/rebaixa participantes.
    * `POST /groups/{jid}/participants?instance_id=`
    */
@@ -590,6 +591,23 @@ export class Bzapper {
   // -------------------------------------------------------------------------
 
   /** Lista os webhooks do projeto. `GET /webhooks` */
+  /**
+   * Lista os avisos de AÇÃO NECESSÁRIA na sua integração. `GET /advisories`
+   *
+   * Um aviso significa que uma mudança nossa exige atualizar o SEU código (SDK a
+   * atualizar, payload ou endpoint que mudou). Nunca é changelog: você só recebe
+   * o que afeta a sua conta, cruzado com a versão de SDK que você roda e os
+   * recursos que de fato usa. O campo `action` diz o que fazer.
+   */
+  listAdvisories(): Promise<AdvisoryList> {
+    return this.get("/advisories");
+  }
+
+  /** Marca um aviso como tratado. `POST /advisories/{id}/read` */
+  markAdvisoryRead(id: string): Promise<void> {
+    return this.post(`/advisories/${encodeURIComponent(id)}/read`);
+  }
+
   listWebhooks(): Promise<WebhookList> {
     return this.get("/webhooks");
   }
@@ -630,8 +648,40 @@ export class Bzapper {
   }
 
   // -------------------------------------------------------------------------
+  // Apps conectados (bZapper Connect — lado do cliente)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Lista os softwares parceiros conectados a esta conta (com nome/logo do
+   * parceiro). `GET /me/connections`
+   */
+  listConnectedApps(): Promise<PartnerConnectionList> {
+    return this.get("/me/connections");
+  }
+
+  /**
+   * Desconecta um app parceiro (admin). A key do parceiro para de funcionar na
+   * hora. `DELETE /me/connections/{id}`
+   */
+  revokeConnectedApp(id: string): Promise<void> {
+    return this.delete(`/me/connections/${encodeURIComponent(id)}`);
+  }
+
+  // -------------------------------------------------------------------------
   // Internos
   // -------------------------------------------------------------------------
+
+  /** POST de envio: `options.idempotencyKey` vira o header `Idempotency-Key`. */
+  private send(
+    path: string,
+    params: unknown,
+    options?: SendOptions,
+  ): Promise<MessageQueued> {
+    const headers = options?.idempotencyKey
+      ? { "Idempotency-Key": options.idempotencyKey }
+      : undefined;
+    return this.http.request<MessageQueued>("POST", path, params, undefined, headers);
+  }
 
   private get<T>(path: string, query?: Query): Promise<T> {
     return this.request<T>("GET", path, undefined, query);
@@ -653,87 +703,13 @@ export class Bzapper {
     return this.request<T>("DELETE", path, undefined, query);
   }
 
-  private async request<T>(
+  private request<T>(
     method: string,
     path: string,
     body?: unknown,
     query?: Query,
   ): Promise<T> {
-    const url = this.buildUrl(path, query);
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.apiKey}`,
-      Accept: "application/json",
-    };
-    if (this.locale) headers["Accept-Language"] = this.locale;
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeout);
-
-    let res: Response;
-    try {
-      res = await this.fetchImpl(url, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new BzapperError({
-          code: "timeout",
-          message: `Requisição expirou após ${this.timeout}ms.`,
-          statusCode: 0,
-        });
-      }
-      throw new BzapperError({
-        code: "network_error",
-        message: err instanceof Error ? err.message : "Falha de rede.",
-        statusCode: 0,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-
-    return this.parse<T>(res);
-  }
-
-  private buildUrl(path: string, query?: Query): string {
-    const url = new URL(this.baseUrl + path);
-    if (query) {
-      for (const [key, value] of Object.entries(query)) {
-        if (value !== undefined) url.searchParams.set(key, String(value));
-      }
-    }
-    return url.toString();
-  }
-
-  private async parse<T>(res: Response): Promise<T> {
-    const text = await res.text();
-
-    if (!res.ok) {
-      let parsed: Partial<ApiErrorBody> = {};
-      try {
-        parsed = text ? (JSON.parse(text) as ApiErrorBody) : {};
-      } catch {
-        // corpo não-JSON: usa fallback abaixo.
-      }
-      throw new BzapperError({
-        code: parsed.code ?? "http_error",
-        message: parsed.message ?? res.statusText ?? "Erro HTTP.",
-        statusCode: res.status,
-        locale: parsed.locale,
-      });
-    }
-
-    // 204 No Content e corpos vazios.
-    if (!text) return undefined as T;
-    try {
-      return JSON.parse(text) as T;
-    } catch {
-      return undefined as T;
-    }
+    return this.http.request<T>(method, path, body, query);
   }
 }
 

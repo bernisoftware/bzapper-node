@@ -45,9 +45,14 @@ export interface SendBase {
   pool_id?: string;
   /** wa_message_id citado (reply). */
   quoted_message_id?: string;
+  /**
+   * Autor (telefone ou JID) da mensagem citada/reagida. Só é preciso em grupo
+   * quando a mensagem citada não está no histórico do bZapper.
+   */
+  quoted_participant?: string;
   /** Correlação ponta-a-ponta do cliente (ecoado nos eventos de status). */
   client_reference?: string;
-  /** JIDs mencionados (grupo). */
+  /** Mencionados (grupo): JIDs ou telefones ("5511…", "+55 11 9…"). */
   mentions?: string[];
   /**
    * Afinidade de conversa: sem instance_id/pool_id, reusa o número que já fala
@@ -60,6 +65,19 @@ export interface SendBase {
    * agendamento estendido. Retorna status `scheduled`. OTP não pode ser agendado.
    */
   scheduled_at?: string;
+}
+
+/**
+ * Opções de requisição dos envios (2º argumento opcional de `send*`).
+ */
+export interface SendOptions {
+  /**
+   * Vai no header `Idempotency-Key` (até 255 caracteres). Repetir o envio com a
+   * mesma chave em 24h (mesma conta) devolve a MESMA resposta, sem reenviar —
+   * retry seguro após timeout. Mesma chave com outro corpo → 422
+   * `idempotency_key_reused`; 1ª ainda em andamento → 409 `idempotency_in_progress`.
+   */
+  idempotencyKey?: string;
 }
 
 /** Mídia por URL **ou** base64 (nunca os dois). */
@@ -383,6 +401,13 @@ export interface ChatActionParams {
 
 export interface GroupParticipant {
   jid: string;
+  /**
+   * Telefone (+DDIdigits) de quem participa, quando se conhece. Em grupo
+   * endereçado por LID o `jid` é o @lid e só o `phone` identifica a pessoa.
+   */
+  phone?: string;
+  /** @lid associado, quando houver. */
+  lid?: string;
   is_admin?: boolean;
   is_super_admin?: boolean;
 }
@@ -393,6 +418,8 @@ export interface Group {
   topic?: string;
   announce?: boolean;
   locked?: boolean;
+  /** Nº de participantes. */
+  size?: number;
   participants?: GroupParticipant[];
 }
 
@@ -617,6 +644,10 @@ export interface Campaign {
   start_at?: string;
   paused_reason?: string;
   created_at?: string;
+  /** Presente quando a campanha (agendada/em andamento) espera a janela de envio 08h–21h BRT. */
+  waiting?: string;
+  /** Quando a janela reabre para esta campanha (ISO 8601); vem junto com `waiting`. */
+  starts_at?: string;
 }
 
 export interface CampaignStats {
@@ -715,4 +746,134 @@ export interface CampaignDryRun {
   estimated_seconds: number;
   estimated_human: string;
   warnings: string[];
+}
+
+/** Aviso de ação necessária na integração (ver `listAdvisories`). */
+export interface Advisory {
+  id: string;
+  title: string;
+  /** O que quebra, em concreto. */
+  impact: string;
+  /** O que você tem que FAZER. */
+  action: string;
+  link?: string;
+  published_at: string;
+}
+
+export interface AdvisoryList {
+  advisories: Advisory[];
+}
+
+// ---------------------------------------------------------------------------
+// bZapper Connect (parceiros)
+// ---------------------------------------------------------------------------
+
+/**
+ * Estado da conexão de um cliente do parceiro.
+ *
+ * `active` = a key funciona. `suspended` = o Pro do cliente está sem pagamento:
+ * a key responde **402 `connect_suspended`** e volta sozinha quando pagar.
+ * `revoked` = encerrada (a key responde 401 `connect_revoked`).
+ */
+export type ConnectionStatus =
+  | "pending_account"
+  | "pending_payment"
+  | "pending_number"
+  | "active"
+  | "suspended"
+  | "revoked";
+
+/** Códigos de erro (`BzapperError.code`) específicos de uma key do Connect. */
+export type ConnectErrorCode =
+  /** 402 — o Pro do cliente está sem pagamento; volta sozinho quando pagar. */
+  | "connect_suspended"
+  /** 401 — a conexão foi encerrada (pelo cliente, pelo parceiro ou exclusão da conta). */
+  | "connect_revoked";
+
+/** Seu cliente, como autenticado no seu produto. `name` ou `company` é obrigatório. */
+export interface ConnectCustomer {
+  name?: string;
+  email: string;
+  /** E.164; pré-preenche o número de WhatsApp. */
+  phone?: string;
+  /** Vira o nome da conta e do projeto no bZapper. */
+  company?: string;
+  /** ISO-3166 alfa-2. Define a moeda (BR → BRL, Américas → USD, demais → EUR). */
+  country?: string;
+  locale?: string;
+}
+
+/** Identidade do parceiro dono do partner secret. */
+export interface Partner {
+  id: string;
+  slug: string;
+  name: string;
+  logo_url?: string;
+  allowed_origins?: string[];
+  webhook_url?: string;
+  key_scopes?: string[];
+}
+
+/** Número (instância) vinculado a uma conexão. */
+export interface PartnerConnectionNumber {
+  id: string;
+  phone: string;
+  status: string;
+}
+
+/** Conexão entre um cliente do parceiro e a conta bZapper dele. */
+export interface PartnerConnection {
+  id: string;
+  /** O id do cliente no SEU sistema. Mesmo id = mesma conexão. */
+  external_id: string;
+  status: ConnectionStatus;
+  /** Conta (tenant) bZapper do cliente. */
+  account_id?: string;
+  project_id?: string;
+  customer?: ConnectCustomer;
+  numbers?: PartnerConnectionNumber[];
+  /** Só em `listConnectedApps` (`/me/connections`). */
+  partner_name?: string;
+  /** Só em `listConnectedApps` (`/me/connections`). */
+  partner_logo_url?: string;
+  activated_at?: string | null;
+  suspended_at?: string | null;
+  revoked_at?: string | null;
+  created_at: string;
+}
+
+/** Conexão + a API key crua do cliente (mostrada uma única vez). */
+export interface PartnerConnectionWithKey extends PartnerConnection {
+  /**
+   * Key crua (`bz_live_...`), mostrada só uma vez — guarde. Escopada ao projeto
+   * do cliente; não mexe em cobrança, usuários, keys nem webhooks da conta.
+   */
+  api_key: string;
+}
+
+export interface PartnerConnectionList {
+  data: PartnerConnection[];
+}
+
+/** Parâmetros de `createConnectSession`. */
+export interface CreateConnectSessionParams {
+  /** O id deste cliente no SEU sistema (máx. 200). Mesmo id = mesma conexão. */
+  external_id: string;
+  customer: ConnectCustomer;
+  /** Idioma do componente, ex.: `pt-BR`. */
+  locale?: string;
+}
+
+/** Sessão do componente embutido (`BzapperConnect.open({ session })`). */
+export interface ConnectSession {
+  /** Token de curta duração (30 min) que abre o componente no front. */
+  session_token: string;
+  expires_at: string;
+  connection: PartnerConnection;
+}
+
+/** Filtros de `listConnections`. */
+export interface ListPartnerConnectionsParams {
+  external_id?: string;
+  status?: ConnectionStatus;
 }

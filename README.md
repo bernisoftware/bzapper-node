@@ -49,7 +49,13 @@ Toda requisição envia `Authorization: Bearer <apiKey>`, `Content-Type: applica
 
 ## Mensagens
 
-Todos os envios aceitam os campos comuns (`SendBase`): `to` (obrigatório, E.164 ou JID), `instance_id?`, `pool_id?`, `quoted_message_id?`, `client_reference?`, `mentions?`. Todos retornam `{ message_id, status, client_reference? }`.
+Todos os envios aceitam os campos comuns (`SendBase`): `to` (obrigatório, E.164 ou JID), `instance_id?`, `pool_id?`, `quoted_message_id?`, `quoted_participant?` (autor da mensagem citada — só em grupo, quando ela não está no histórico), `client_reference?`, `mentions?` (JIDs ou telefones). Todos retornam `{ message_id, status, client_reference? }`.
+
+Retry seguro: passe `{ idempotencyKey }` como 2º argumento de qualquer envio. Repetir com a mesma chave em 24h devolve a MESMA resposta sem reenviar (409 `idempotency_in_progress` se a 1ª ainda roda; 422 `idempotency_key_reused` se o corpo mudou).
+
+```ts
+await bz.sendText({ to: "+5511999999999", body: "Pedido #42 confirmado" }, { idempotencyKey: "pedido-42" });
+```
 
 ### Texto
 
@@ -281,6 +287,7 @@ await bz.updateGroupParticipants(group.jid, inst.id, {
 const invite = await bz.groupInvite(group.jid, inst.id);
 console.log(invite.invite_link);
 
+await bz.previewGroupInvite(inst.id, { code: "AbCdEf123456" }); // nome/tamanho SEM entrar
 await bz.joinGroup(inst.id, { code: "AbCdEf123456" });
 await bz.leaveGroup(group.jid, inst.id);
 ```
@@ -375,6 +382,164 @@ app.post(
 app.listen(3000);
 ```
 
+## bZapper Connect
+
+Para **softwares parceiros**: o seu produto deixa os SEUS clientes assinarem o
+bZapper Pro e conectarem o WhatsApp sem sair dele, e recebe uma API key
+(`bz_live_...`) autorizada pelo cliente. O cliente continua sendo uma conta
+bZapper direta; a conexão só funciona enquanto o Pro dele estiver pago.
+
+O fluxo:
+
+1. Seu **backend** cria uma sessão com o partner secret (`bz_partner_...`).
+2. Seu **front** abre o componente com o `session_token`.
+3. Ao concluir (Pro pago + número conectado), o componente emite um `code` de uso único (10 min).
+4. Seu backend troca o `code` pela API key do cliente e guarda a key.
+5. Dali em diante, use o `Bzapper` normal com essa key.
+
+> O partner secret é **só de backend** — nunca o mande para o navegador.
+
+### Backend (Express)
+
+```ts
+import express from "express";
+import {
+  Bzapper,
+  BzapperError,
+  BzapperPartner,
+  Webhooks,
+  isConnectEvent,
+  type PartnerWebhookEvent,
+} from "@bzapper/client";
+
+const app = express();
+const partner = new BzapperPartner({ partnerSecret: process.env.BZAPPER_PARTNER_SECRET! });
+
+// 1) Cria a sessão do componente para o cliente logado no SEU produto.
+app.post("/bzapper/session", express.json(), async (req, res) => {
+  const user = req.user; // seu usuário autenticado
+  const session = await partner.createConnectSession({
+    external_id: user.id, // o id do cliente no SEU sistema (mesmo id = mesma conexão)
+    customer: {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,     // opcional, E.164 — pré-preenche o número
+      company: user.company, // opcional — vira o nome da conta/projeto
+      country: "BR",         // opcional — define a moeda
+    },
+    locale: "pt-BR",
+  });
+  res.json({ session: session.session_token });
+});
+
+// 2) Troca o code emitido pelo componente pela API key do cliente.
+app.post("/bzapper/exchange", express.json(), async (req, res) => {
+  const connection = await partner.exchangeCode(req.body.code);
+  // Guarde agora — a key não é mostrada de novo (use rotateConnectionKey se perder).
+  await db.saveBzapperKey(connection.external_id, connection.id, connection.api_key);
+  res.json({ status: connection.status });
+});
+
+// 3) Webhook do parceiro: mesma assinatura HMAC (X-Bzapper-Signature) dos webhooks
+//    normais, com o segredo do webhook do parceiro. Toda entrega traz `connection`.
+const hooks = new Webhooks(process.env.BZAPPER_PARTNER_WEBHOOK_SECRET!);
+
+hooks.onAny(async (event) => {
+  if (!isConnectEvent(event)) return; // mensagens/status dos números também chegam aqui
+  const { connection } = event as PartnerWebhookEvent;
+  switch (event.type) {
+    case "connect.completed":
+    case "connect.resumed":
+      await db.setBzapperStatus(connection.externalId, "active");
+      break;
+    case "connect.suspended": // Pro do cliente sem pagamento — volta sozinho ao pagar
+      await db.setBzapperStatus(connection.externalId, "suspended");
+      break;
+    case "connect.revoked": // encerrada — a key não vale mais
+      await db.deleteBzapperKey(connection.externalId);
+      break;
+  }
+});
+
+app.post(
+  "/webhooks/bzapper-partner",
+  express.raw({ type: "application/json" }), // corpo CRU, obrigatório para a assinatura
+  hooks.middleware(),
+);
+
+// 4) Usando a key do cliente: trate a suspensão (402) e a revogação (401).
+app.post("/avisar", express.json(), async (req, res) => {
+  const bz = new Bzapper({ apiKey: await db.getBzapperKey(req.user.id) });
+  try {
+    await bz.sendText({ to: req.body.to, body: req.body.text });
+    res.sendStatus(202);
+  } catch (err) {
+    if (err instanceof BzapperError && err.code === "connect_suspended") {
+      // 402: o Pro do cliente está sem pagamento. Peça para ele regularizar.
+      return res.status(402).json({ error: "Regularize sua assinatura do bZapper." });
+    }
+    if (err instanceof BzapperError && err.code === "connect_revoked") {
+      // 401: a conexão acabou. Ofereça conectar de novo (nova sessão).
+      return res.status(409).json({ error: "Conecte o WhatsApp novamente." });
+    }
+    throw err;
+  }
+});
+
+app.listen(3000);
+```
+
+### Front
+
+```html
+<script src="https://widget.bzapper.com.br/v1/connect.js"></script>
+<script>
+  async function conectarWhatsApp() {
+    const { session } = await fetch("/bzapper/session", { method: "POST" }).then((r) => r.json());
+
+    BzapperConnect.open({
+      session,
+      onComplete: ({ code }) =>
+        fetch("/bzapper/exchange", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code }),
+        }),
+    });
+  }
+</script>
+```
+
+### Gerenciar conexões
+
+```ts
+const me = await partner.me(); // de quem é o partner secret
+
+const { data } = await partner.listConnections({ status: "suspended" }); // ou { external_id }
+const conn = await partner.getConnection(data[0].id); // status, conta, números
+
+const rotated = await partner.rotateConnectionKey(conn.id); // nova key; a anterior para de valer
+console.log(rotated.api_key);
+
+await partner.revokeConnection(conn.id); // revoga a key (NÃO cancela o plano do cliente)
+```
+
+Estados da conexão (`status`): `pending_account`, `pending_payment`,
+`pending_number`, `active`, `suspended` e `revoked`. Eventos entregues ao webhook
+do parceiro: `connect.completed`, `connect.suspended`, `connect.resumed` e
+`connect.revoked` (lista em `CONNECT_EVENT_TYPES`), além dos eventos normais
+dos números das conexões ativas. O `event.connection` tem `id`, `externalId`,
+`accountId`, `projectId` e `status`.
+
+### Lado do cliente: apps conectados
+
+Com a API key da própria conta, o cliente vê e desconecta os parceiros:
+
+```ts
+const { data: apps } = await bz.listConnectedApps(); // com partner_name / partner_logo_url
+await bz.revokeConnectedApp(apps[0].id);             // admin; a key do parceiro para na hora
+```
+
 ## Uso
 
 ```ts
@@ -403,6 +568,7 @@ try {
     if (err.code === "rate_limited") {
       // backoff e retry...
     }
+    // Key de bZapper Connect: "connect_suspended" (402) e "connect_revoked" (401).
   } else {
     throw err;
   }

@@ -1,5 +1,7 @@
 export { Bzapper, createClient } from "./client.js";
 export type { BzapperOptions } from "./client.js";
+export { BzapperPartner, createPartnerClient } from "./partner.js";
+export type { BzapperPartnerOptions } from "./partner.js";
 export { BzapperError } from "./error.js";
 export type * from "./types.js";
 export {
@@ -11,6 +13,8 @@ export {
   EVENT_ID_HEADER,
   EVENT_TYPE_HEADER,
   EVENT_TYPES,
+  CONNECT_EVENT_TYPES,
+  isConnectEvent,
 } from "./webhooks.js";
 export type {
   WebhookEvent,
@@ -20,4 +24,7 @@ export type {
   RawBody,
   WebhookRequest,
   WebhookResponse,
+  WebhookConnection,
+  PartnerWebhookEvent,
+  ConnectEventType,
 } from "./webhooks.js";
