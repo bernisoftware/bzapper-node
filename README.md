@@ -16,7 +16,7 @@ npm i @bzapper/client
 
 Requer **Node 18+** (fetch nativo).
 
-**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.6.2"`, sem `^`): cada release
+**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.7.1"`, sem `^`): cada release
 declara nas notas se muda a superfície pública ou se é só aditiva.
 
 ## Hello world

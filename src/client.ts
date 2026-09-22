@@ -129,6 +129,13 @@ import type {
   UpdateJoinRequestsParams,
   UpdateProfileParams,
   UpdateProjectParams,
+  Blocklist,
+  CallOffered,
+  CampaignStatusChange,
+  GroupJoined,
+  JoinRequestList,
+  ProfileUpdated,
+  WAMessageRef,
 } from "./types.js";
 
 /** URL base padrão da API (produção). Sobrescreva só em dev/self-host. */
@@ -276,7 +283,7 @@ export class Bzapper {
   }
 
   /** Edita o texto de uma mensagem enviada. `PATCH /messages/{id}` */
-  async editMessage(id: string, params: EditMessageParams, options?: RequestOptions): Promise<unknown> {
+  async editMessage(id: string, params: EditMessageParams, options?: RequestOptions): Promise<WAMessageRef> {
     return this.patch(`/messages/${p(id)}`, params, undefined, options);
   }
 
@@ -286,7 +293,7 @@ export class Bzapper {
   }
 
   /** Encaminha uma mensagem (experimental). `POST /messages/forward` */
-  async forwardMessage(params: ForwardMessageParams, options?: RequestOptions): Promise<unknown> {
+  async forwardMessage(params: ForwardMessageParams, options?: RequestOptions): Promise<WAMessageRef> {
     return this.post("/messages/forward", params, undefined, options);
   }
 
@@ -355,17 +362,17 @@ export class Bzapper {
   }
 
   /** Pausa a campanha. `POST /campaigns/{id}/pause` */
-  async pauseCampaign(id: string, options?: RequestOptions): Promise<{ id: string; status: string }> {
+  async pauseCampaign(id: string, options?: RequestOptions): Promise<CampaignStatusChange> {
     return this.post(`/campaigns/${p(id)}/pause`, undefined, undefined, options);
   }
 
   /** Retoma a campanha. `POST /campaigns/{id}/resume` */
-  async resumeCampaign(id: string, options?: RequestOptions): Promise<{ id: string; status: string }> {
+  async resumeCampaign(id: string, options?: RequestOptions): Promise<CampaignStatusChange> {
     return this.post(`/campaigns/${p(id)}/resume`, undefined, undefined, options);
   }
 
   /** Cancela a campanha. `POST /campaigns/{id}/cancel` */
-  async cancelCampaign(id: string, options?: RequestOptions): Promise<{ id: string; status: string }> {
+  async cancelCampaign(id: string, options?: RequestOptions): Promise<CampaignStatusChange> {
     return this.post(`/campaigns/${p(id)}/cancel`, undefined, undefined, options);
   }
 
@@ -676,7 +683,7 @@ export class Bzapper {
   }
 
   /** Lista os contatos bloqueados. `GET /blocklist?instance_id=` */
-  async getBlocklist(instanceId: string, options?: RequestOptions): Promise<unknown> {
+  async getBlocklist(instanceId: string, options?: RequestOptions): Promise<Blocklist> {
     return this.get("/blocklist", { instance_id: instanceId }, options);
   }
 
@@ -686,7 +693,7 @@ export class Bzapper {
   }
 
   /** Inicia uma chamada (experimental). `POST /calls/offer` */
-  async offerCall(params: OfferCallParams, options?: RequestOptions): Promise<unknown> {
+  async offerCall(params: OfferCallParams, options?: RequestOptions): Promise<CallOffered> {
     return this.post("/calls/offer", params, undefined, options);
   }
 
@@ -715,7 +722,7 @@ export class Bzapper {
   }
 
   /** Entra num grupo por link/código de convite. `POST /groups/join?instance_id=` */
-  async joinGroup(instanceId: string, params: JoinGroupParams, options?: RequestOptions): Promise<void> {
+  async joinGroup(instanceId: string, params: JoinGroupParams, options?: RequestOptions): Promise<GroupJoined> {
     return this.post("/groups/join", params, { instance_id: instanceId }, options);
   }
 
@@ -760,7 +767,7 @@ export class Bzapper {
   }
 
   /** Pedidos de entrada pendentes. `GET /groups/{jid}/join-requests?instance_id=` */
-  async listJoinRequests(jid: string, instanceId: string, options?: RequestOptions): Promise<unknown> {
+  async listJoinRequests(jid: string, instanceId: string, options?: RequestOptions): Promise<JoinRequestList> {
     return this.get(`/groups/${p(jid, "jid")}/join-requests`, { instance_id: instanceId }, options);
   }
 
@@ -999,7 +1006,7 @@ export class Bzapper {
   }
 
   /** Atualiza o perfil do usuário (nome/telefone/cargo/idioma). `PATCH /me` */
-  async updateProfile(params: UpdateProfileParams, options?: RequestOptions): Promise<unknown> {
+  async updateProfile(params: UpdateProfileParams, options?: RequestOptions): Promise<ProfileUpdated> {
     return this.patch("/me", params, undefined, options);
   }
 

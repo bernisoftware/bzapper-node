@@ -291,6 +291,10 @@ export interface ApiKey {
   created_at?: string;
   last_used_at?: string | null;
   revoked_at?: string | null;
+  /** Projeto ao qual a chave pertence. */
+  project_id?: string;
+  /** Preenchido quando a chave foi emitida a um parceiro via bZapper Connect. */
+  partner_connection_id?: string;
 }
 
 export interface ApiKeyList {
@@ -996,6 +1000,73 @@ export interface AccountUpdated {
 /** Resultado de upload de logo. */
 export interface LogoUploaded {
   logo_url?: string;
+}
+
+/** Nome do schema no OpenAPI (`BrandLogoUploaded`) — mesmo formato de {@link LogoUploaded}. */
+export type BrandLogoUploaded = LogoUploaded;
+
+/** Usuário (schema `User`) — devolvido por `PATCH /me`. */
+export interface User {
+  id: string;
+  tenant_id: string;
+  email: string;
+  name?: string;
+  role: Role;
+  /** Telefone em E.164 (+DDIdigits). */
+  phone?: string;
+  job_title?: string;
+  avatar_url?: string;
+  email_verified_at?: string | null;
+  phone_verified_at?: string | null;
+  /** Opt-in para receber avisos de integração pelo WhatsApp. */
+  notify_whatsapp?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** `PATCH /me` → `{ user }`. */
+export interface ProfileUpdated {
+  user: User;
+}
+
+// ----- Respostas de operações avançadas / grupos / campanhas -----
+
+/** `PATCH /messages/{id}` e `POST /messages/forward` → id WhatsApp da mensagem resultante. */
+export interface WAMessageRef {
+  wa_message_id: string;
+}
+
+/** `GET /blocklist` → JIDs bloqueados. */
+export interface Blocklist {
+  data: string[];
+}
+
+/** `POST /calls/offer` */
+export interface CallOffered {
+  call_id: string;
+}
+
+/** `POST /groups/join` */
+export interface GroupJoined {
+  /** JID do grupo em que entrou (…@g.us). */
+  jid: string;
+}
+
+/** Pedido de entrada pendente num grupo. */
+export interface JoinRequest {
+  /** JID de quem pediu. */
+  jid: string;
+}
+
+/** `GET /groups/{jid}/join-requests` */
+export interface JoinRequestList {
+  data: JoinRequest[];
+}
+
+/** Novo status da campanha após pause/resume/cancel. */
+export interface CampaignStatusChange {
+  id: string;
+  status: "paused" | "running" | "canceled" | (string & {});
 }
 
 // ----- Projetos -----
