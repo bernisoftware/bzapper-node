@@ -185,6 +185,7 @@ function toEvent(envelope: Record<string, unknown>): WebhookEvent {
       ? {
           jid: (s as Record<string, unknown>).jid as string | undefined,
           lid: (s as Record<string, unknown>).lid as string | undefined,
+          phone: (s as Record<string, unknown>).phone as string | undefined,
           name: (s as Record<string, unknown>).name as string | undefined,
         }
       : undefined;

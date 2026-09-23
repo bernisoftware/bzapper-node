@@ -2,11 +2,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, before, beforeEach, describe, it } from "node:test";
+import { createHmac } from "node:crypto";
 import {
   Bzapper,
   BzapperError,
   BzapperPartner,
   CLIENT_ID,
+  constructWebhookEvent,
   DEFAULT_BASE_URL,
   NetworkError,
   NotFoundError,
@@ -296,5 +298,49 @@ describe("exportContacts (CSV — fora dos casos gerados, BRIEF §6)", () => {
     const err = await failure(bz.exportContacts({ status: "active" }));
     assert.equal(err.code, "unauthorized");
     assert.equal(err.status, 401);
+  });
+});
+
+describe("webhook: quem enviou", () => {
+  const SECRET = "whsec_teste";
+  const sign = (body: string) => "sha256=" + createHmac("sha256", SECRET).update(body).digest("hex");
+
+  // A API manda `sender.phone` no envelope (Sender.Phone em internal/webhook/model.go) e o
+  // tipo WebhookSender sempre prometeu o campo — mas o parser não o lia, e quem usava a SDK
+  // tinha que cavar no `raw` para achar o telefone de quem escreveu.
+  it("expõe sender.phone junto de jid/lid/name", () => {
+    const body = JSON.stringify({
+      event_id: "evt_1",
+      event: "message.received",
+      instance_id: "11111111-1111-4111-8111-111111111111",
+      sender: {
+        jid: "5511999990000@s.whatsapp.net",
+        lid: "123456789@lid",
+        phone: "+5511999990000",
+        name: "Ana",
+      },
+      payload: { body: "olá" },
+    });
+
+    const event = constructWebhookEvent(SECRET, body, sign(body));
+
+    assert.equal(event.sender?.phone, "+5511999990000");
+    assert.equal(event.sender?.jid, "5511999990000@s.whatsapp.net");
+    assert.equal(event.sender?.lid, "123456789@lid");
+    assert.equal(event.sender?.name, "Ana");
+  });
+
+  it("sem telefone (só @lid), phone fica indefinido", () => {
+    const body = JSON.stringify({
+      event_id: "evt_2",
+      event: "message.received",
+      sender: { lid: "123456789@lid", name: "Sem telefone" },
+      payload: {},
+    });
+
+    const event = constructWebhookEvent(SECRET, body, sign(body));
+
+    assert.equal(event.sender?.phone, undefined);
+    assert.equal(event.sender?.lid, "123456789@lid");
   });
 });
