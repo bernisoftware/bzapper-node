@@ -16,7 +16,7 @@ npm i @bzapper/client
 
 Requer **Node 18+** (fetch nativo).
 
-**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.7.1"`, sem `^`): cada release
+**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.8.0"`, sem `^`): cada release
 declara nas notas se muda a superfície pública ou se é só aditiva.
 
 ## Hello world
@@ -411,6 +411,45 @@ await bz.deleteSuppression("+5511977776666");
 await bz.deleteContact(contact.id!);
 ```
 
+#### Importar em lote (`importContacts`)
+
+Upsert por telefone, até **1000 linhas** por chamada. Linha ruim vai para `errors` e **não**
+derruba o resto do lote; supresso/opt-out/bloqueado aparece em `skipped_rows` e não ressuscita.
+Tags e grupos são criados sob demanda. Contato novo nasce `pending_validation` (precisa de
+opt-in antes de campanha).
+
+```ts
+const rows = [
+  { phone: "+5511988887777", name: "Ana", email: "ana@exemplo.com", tags: ["vip"], groups: ["clientes"] },
+  { phone: "+5511977776666", name: "Bruno", address: { city: "São Paulo", state: "SP" } },
+];
+
+const dry = await bz.importContacts({ contacts: rows, dry_run: true }); // valida, não escreve
+if (dry.failed === 0) {
+  const res = await bz.importContacts({ contacts: rows });
+  console.log(res.created, res.updated, res.skipped, res.failed);
+  for (const row of res.skipped_rows ?? []) console.warn(row.index, row.phone, row.reason);
+}
+```
+
+#### Exportar em CSV (`exportContacts`)
+
+Aceita os **mesmos filtros** de `listContacts` (sem `offset`; `limit` é o teto de linhas) e é a
+única rota da SDK que **não devolve JSON**: você recebe o **texto CSV cru** (`string`), pronto
+para gravar em arquivo ou jogar no seu parser — sem streams para lembrar de fechar.
+
+```ts
+import { writeFile } from "node:fs/promises";
+
+const csv = await bz.exportContacts({ tags: ["vip"], status: "active", limit: 50_000 });
+await writeFile("contatos.csv", csv, "utf8");
+// phone,name,email,status,source,tags,groups,created_at,last_activity_at
+// +5511988887777,"Silva, Ana",ana@exemplo.com,active,import,vip;novo,clientes,2026-09-21T12:00:00Z,…
+```
+
+Tags e grupos vêm unidos por `;` e as datas em RFC 3339 (UTC). Campos com vírgula ou aspas vêm
+escapados pelo padrão CSV — use um parser de verdade se for reimportar.
+
 ## Campanhas
 
 ```ts
@@ -470,6 +509,22 @@ console.log(created.api_key); // guarde — mostrada só uma vez!
 
 await bz.revokeKey(created.key.id);
 ```
+
+### Rotacionar sem quebrar o deploy (`rotateKey`)
+
+`rotateKey` cria uma chave **nova** (herda papel, escopos, projeto e nome) e mantém a **antiga**
+funcionando por um período de carência — padrão 24 h, máximo 30 dias, `0` revoga na hora. Suba a
+nova, troque o segredo onde a integração roda, e a antiga morre sozinha (depois do prazo ela
+responde `401 key_expired`). Só admin; a chave crua vem uma única vez.
+
+```ts
+const rot = await bz.rotateKey(keyId, { revoke_in_seconds: 3600 }); // 1h de carência
+console.log(rot.api_key);              // guarde — mostrada só uma vez!
+console.log(rot.old_key_expires_at);   // quando a antiga para (null = revogada na hora)
+console.log(rot.previous_key?.rotated_to === rot.key.id); // true
+```
+
+Chaves de parceiro (bZapper Connect) rotacionam pelo `partner.rotateConnectionKey`.
 
 ## Webhooks
 
@@ -539,6 +594,61 @@ app.post(
 
 app.listen(3000);
 ```
+
+### Testar no localhost (`bzapper listen`)
+
+O pacote traz um executável. Sem expor URL pública nenhuma, ele abre o stream de
+eventos do seu projeto e **reenvia cada um ao seu servidor local**, assinado
+igualzinho à produção (no espírito do `stripe listen`):
+
+```bash
+npx @bzapper/client listen --forward-to http://localhost:3000/webhooks/bzapper
+```
+
+```
+bZapper v0.8.0 — relay de webhooks para o localhost
+  ouvindo    https://api.bzapper.com.br/webhooks/listen
+  reenviando http://localhost:3000/webhooks/bzapper
+  secret     whsec_Hs3…
+
+✓ conectado ao stream de eventos. Ctrl+C para sair.
+
+14:02:11  message.received           evt_01HZX…  →  200 12ms
+14:02:19  message.sent               evt_01HZY…  →  500 8ms
+```
+
+| Opção | |
+|---|---|
+| `-f`, `--forward-to <url>` | URL local que recebe os POSTs (obrigatória, salvo com `--print-only`) |
+| `--api-key <key>` | a key `bz_live_…`; padrão `$BZAPPER_API_KEY` |
+| `--base-url <url>` | base da API; padrão `$BZAPPER_BASE_URL` ou produção |
+| `--project <id>` | projeto ativo (só para credencial de sessão — a API key já traz o seu) |
+| `--events <a,b,c>` | só estes tipos (ex.: `message.received,message.sent`) |
+| `--secret <whsec_…>` | segredo de assinatura; padrão: um novo, impresso ao iniciar |
+| `--print-only` | não reenvia nada, só imprime o que chegar |
+| `--help`, `--version` | |
+
+**Não precisa de webhook cadastrado**: o stream espelha **todo** evento do
+projeto, exista ou não uma assinatura — é justamente o modo de desenvolver antes
+de ter URL pública. A key vai no header `Authorization`, nunca na URL.
+
+Cada POST leva os **mesmos headers da produção** — `X-Bzapper-Signature:
+sha256=<hmac do corpo cru>`, `X-Bzapper-Event-Id`, `X-Bzapper-Event-Type` e
+`Content-Type: application/json` —, então o seu `Webhooks` valida o relay como
+validaria a bZapper:
+
+```ts
+const hooks = new Webhooks(process.env.BZAPPER_WEBHOOK_SECRET!); // o secret que a CLI imprimiu
+```
+
+> ⚠️ **O secret é seu, não nosso.** Sem `--secret`, a CLI gera um na hora e o
+> imprime: use-o no seu app durante o teste. A assinatura prova que o POST veio
+> **desta CLI**, não da bZapper — ela vale exatamente o que o secret vale. Em
+> produção, o secret é o do webhook cadastrado (`createWebhook`).
+
+A conexão se reergue sozinha (backoff exponencial a partir do `retry` do
+servidor, teto de 30 s); `Ctrl+C` sai limpo com um resumo. Credencial recusada
+encerra na hora, com código de saída diferente de zero.
 
 ## bZapper Connect
 
@@ -719,7 +829,7 @@ pelo `code`** (estável), nunca pelo `message` (texto traduzido).
 | 401 | `AuthenticationError` | key inválida/revogada (`connect_revoked`) |
 | 403 | `PermissionDeniedError` | `requiredScope` diz o escopo que faltou |
 | 404 | `NotFoundError` | |
-| 409 | `ConflictError` | ex.: `instance_not_connected`, `idempotency_in_progress` |
+| 409 | `ConflictError` | ex.: `not_connected`, `idempotency_in_progress` |
 | 429 | `RateLimitError` | `retryAfter` em segundos |
 | 5xx | `ServerError` | |
 | sem resposta | `NetworkError` | `status = 0`, `code = "NETWORK_ERROR"` |
@@ -739,7 +849,7 @@ try {
   if (err instanceof RateLimitError) {
     console.error(`aguarde ${err.retryAfter}s`);
   } else if (err instanceof BzapperError) {
-    console.error(err.code, err.status, err.requestId); // ex.: "instance_not_connected" 409 "a1b2…"
+    console.error(err.code, err.status, err.requestId); // ex.: "not_connected" 409 "a1b2…"
     // Key de bZapper Connect: "connect_suspended" (402) e "connect_revoked" (401).
   } else {
     throw err;

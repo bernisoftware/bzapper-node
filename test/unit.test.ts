@@ -227,3 +227,74 @@ describe("upload multipart", () => {
     assert.match(r.rawBody, /Content-Type: image\/png/);
   });
 });
+
+describe("exportContacts (CSV — fora dos casos gerados, BRIEF §6)", () => {
+  // Uma linha com vírgula E aspas dentro do campo: se alguém "melhorar" isso para
+  // JSON ou mexer no texto, este teste quebra.
+  const CSV =
+    "phone,name,email,status,source,tags,groups,created_at,last_activity_at\r\n" +
+    '+5511999990000,"Silva, Ana ""Aninha""",ana@example.com,active,import,vip;novo,clientes,' +
+    "2026-09-21T12:00:00Z,2026-09-22T08:30:00Z\r\n";
+
+  it("GET /contacts/export com os filtros de listContacts; devolve o CSV cru intacto", async () => {
+    server.setHandler(() => ({
+      status: 200,
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="contatos.csv"',
+      },
+      body: CSV,
+    }));
+
+    const csv = await bz.exportContacts({
+      search: "ana",
+      tags: ["vip", "novo"],
+      tags_match: "all",
+      groups: ["clientes"],
+      status: "active",
+      has_email: true,
+      created_after: new Date(Date.UTC(2026, 8, 21, 12, 0, 0)),
+      sort: "name",
+      limit: 50_000,
+    });
+
+    // 1. O texto volta byte a byte — inclusive a linha com vírgula e aspas.
+    assert.equal(typeof csv, "string");
+    assert.equal(csv, CSV);
+    assert.equal(csv.split("\r\n")[1], CSV.split("\r\n")[1]);
+
+    // 2. Caminho e query exatos (mesma conversão de Date/lista/booleano da listagem).
+    const r = server.requests[0]!;
+    assert.equal(r.method, "GET");
+    assert.equal(r.path, "/contacts/export");
+    assert.deepEqual(Object.fromEntries(r.queryPairs), {
+      search: "ana",
+      tags: "vip,novo",
+      tags_match: "all",
+      groups: "clientes",
+      status: "active",
+      has_email: "true",
+      created_after: "2026-09-21T12:00:00Z",
+      sort: "name",
+      limit: "50000",
+    });
+
+    // 3. Pede CSV, não JSON: a regra "2xx não-JSON = INVALID_RESPONSE" não vale aqui.
+    assert.equal(r.headers["accept"], "text/csv");
+    assert.equal(r.headers["idempotency-key"], undefined, "leitura não leva Idempotency-Key");
+    assert.match(String(r.headers["x-bzapper-client"]), /^bzapper-node\/\d/);
+  });
+
+  it("sem filtros não manda query; corpo vazio é um CSV vazio, não erro", async () => {
+    server.setHandler(() => ({ status: 200, headers: { "Content-Type": "text/csv" }, body: "" }));
+    assert.equal(await bz.exportContacts(), "");
+    assert.deepEqual(server.requests[0]!.queryPairs, []);
+  });
+
+  it("erro continua BzapperError com o code do JSON", async () => {
+    server.setHandler(() => ({ status: 401, body: { code: "unauthorized", message: "chave inválida" } }));
+    const err = await failure(bz.exportContacts({ status: "active" }));
+    assert.equal(err.code, "unauthorized");
+    assert.equal(err.status, 401);
+  });
+});

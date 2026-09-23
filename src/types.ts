@@ -295,6 +295,13 @@ export interface ApiKey {
   project_id?: string;
   /** Preenchido quando a chave foi emitida a um parceiro via bZapper Connect. */
   partner_connection_id?: string;
+  /**
+   * Quando a chave para de funcionar (período de carência de uma rotação).
+   * `null`/ausente = a chave não foi rotacionada.
+   */
+  expires_at?: string | null;
+  /** Id da chave que substituiu esta (preenchido pela rotação). */
+  rotated_to?: string;
 }
 
 export interface ApiKeyList {
@@ -310,6 +317,26 @@ export interface ApiKeyCreated {
   /** Chave CRUA — mostrada uma única vez, nunca recuperável. */
   api_key: string;
   key: ApiKey;
+}
+
+/** `POST /keys/{id}/rotate` */
+export interface RotateKeyParams {
+  /**
+   * Carência da chave ANTIGA, em segundos (padrão 86400, máx. 2592000 = 30 dias).
+   * `0` revoga na hora.
+   */
+  revoke_in_seconds?: number;
+}
+
+export interface ApiKeyRotated {
+  /** Chave CRUA nova — mostrada uma única vez, nunca recuperável. */
+  api_key: string;
+  /** A chave nova (herda papel, escopos, projeto e nome da antiga). */
+  key: ApiKey;
+  /** A chave antiga, com `expires_at`/`revoked_at` já atualizados. */
+  previous_key?: ApiKey;
+  /** Quando a antiga para de funcionar. `null` quando revogada na hora. */
+  old_key_expires_at?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1123,6 +1150,57 @@ export interface UpdateContactParams {
   document_type?: string;
   address?: ContactAddress;
 }
+
+/** Uma linha do lote de {@link Bzapper.importContacts}. */
+export interface ContactImportRow {
+  /** `+DDIdigits` (E.164 sem espaços) — a chave do upsert. */
+  phone: string;
+  name?: string;
+  email?: string;
+  document?: string;
+  document_type?: string;
+  address?: ContactAddress;
+  /** Chaves de tag (criadas sob demanda). */
+  tags?: string[];
+  /** Chaves de grupo de contato (criadas sob demanda). */
+  groups?: string[];
+}
+
+/** `POST /contacts/import` — no máximo 1000 linhas por chamada. */
+export interface ImportContactsParams {
+  contacts: ContactImportRow[];
+  /** Valida e relata tudo sem escrever nada. Padrão `false`. */
+  dry_run?: boolean;
+}
+
+/** Linha que a importação pulou (`skipped_rows`) ou recusou (`errors`). */
+export interface ContactImportRowIssue {
+  /** Posição da linha no lote enviado (base 0). */
+  index: number;
+  phone: string;
+  /** Motivo estável, para a sua lógica (ex.: `suppressed`, `invalid_phone`). */
+  reason: string;
+  detail?: string;
+}
+
+export interface ContactImportResult {
+  dry_run?: boolean;
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  /** Contatos não tocados (supresso/opt-out/bloqueado). */
+  skipped_rows?: ContactImportRowIssue[];
+  /** Linhas inválidas — não derrubam o resto do lote. */
+  errors?: ContactImportRowIssue[];
+}
+
+/**
+ * `GET /contacts/export` — os MESMOS filtros de {@link ListContactsParams},
+ * sem `offset` (o export não pagina; `limit` é o teto de linhas).
+ */
+export type ExportContactsParams = Omit<ListContactsParams, "offset">;
 
 export interface ContactHistoryItem {
   kind: "message" | "event";

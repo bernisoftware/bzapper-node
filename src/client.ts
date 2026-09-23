@@ -14,6 +14,7 @@ import type {
   AccountUserList,
   ApiKeyCreated,
   ApiKeyList,
+  ApiKeyRotated,
   BrandApplyResult,
   BrandProfile,
   ChatActionParams,
@@ -85,6 +86,7 @@ import type {
   CheckoutResult,
   ConnectOfficialAccountParams,
   ContactHistoryList,
+  ContactImportResult,
   ContactNoteParams,
   ContactRecord,
   CreateContactParams,
@@ -93,6 +95,8 @@ import type {
   CreateSuppressionParams,
   CreateTaxonParams,
   EditMessageParams,
+  ExportContactsParams,
+  ImportContactsParams,
   Entitlements,
   ForwardMessageParams,
   GroupInviteParams,
@@ -117,6 +121,7 @@ import type {
   ProjectHealthList,
   RejectCallParams,
   RevokeMessageParams,
+  RotateKeyParams,
   SetPrivacyParams,
   SetProxyParams,
   SuppressionList,
@@ -565,6 +570,30 @@ export class Bzapper {
     return this.delete(`/keys/${p(id)}`, undefined, options);
   }
 
+  /**
+   * Rotaciona uma API key do tenant (admin). `POST /keys/{id}/rotate`
+   * (operationId `rotateMyKey`)
+   *
+   * Cria uma chave NOVA herdando papel, escopos, projeto e nome da antiga, e
+   * mantém a ANTIGA funcionando por um período de carência — assim a
+   * integração que está rodando não quebra no meio do deploy. A chave crua vem
+   * em `api_key` e é mostrada UMA única vez. Depois do prazo, a antiga responde
+   * `401 key_expired`.
+   *
+   * Erros: `403 admin_required`, `404 not_found`, `409 key_already_revoked` /
+   * `key_already_expired`. Chaves de parceiro (bZapper Connect) rotacionam pelo
+   * {@link BzapperPartner.rotateConnectionKey}.
+   *
+   * @example
+   * ```ts
+   * // 1h de carência: sobe a nova, troca o segredo, e a antiga morre sozinha.
+   * const { api_key, old_key_expires_at } = await bz.rotateKey(keyId, { revoke_in_seconds: 3600 });
+   * ```
+   */
+  async rotateKey(id: string, params?: RotateKeyParams, options?: RequestOptions): Promise<ApiKeyRotated> {
+    return this.post(`/keys/${p(id)}/rotate`, params, undefined, options);
+  }
+
   // -------------------------------------------------------------------------
   // Uso
   // -------------------------------------------------------------------------
@@ -800,29 +829,56 @@ export class Bzapper {
    * `tags`/`groups` vão como CSV; datas aceitam `Date` (vira ISO 8601 UTC).
    */
   async listContacts(params: ListContactsParams = {}, options?: RequestOptions): Promise<ContactRecordList> {
-    return this.get(
-      "/contacts",
+    return this.get("/contacts", { ...contactFilterQuery(params), offset: params.offset }, options);
+  }
+
+  /**
+   * Importa contatos em lote (upsert por telefone). `POST /contacts/import`
+   *
+   * Até 1000 linhas por chamada. Contato novo nasce com `source: import` e
+   * `status: pending_validation` (precisa de opt-in antes de campanha); no que
+   * já existe, só os campos informados mudam — valor vazio nunca apaga o que
+   * está lá. Supresso/opt-out/bloqueado aparece em `skipped_rows` e não
+   * ressuscita. Tags e grupos são criados sob demanda. Linha ruim vai para
+   * `errors` e NÃO derruba o resto do lote; `dry_run` valida sem escrever nada.
+   *
+   * Erros: `400 invalid_body` / `contacts_required`, `422 import_too_large`.
+   *
+   * @example
+   * ```ts
+   * const dry = await bz.importContacts({ contacts: rows, dry_run: true });
+   * if (dry.failed === 0) await bz.importContacts({ contacts: rows });
+   * ```
+   */
+  async importContacts(params: ImportContactsParams, options?: RequestOptions): Promise<ContactImportResult> {
+    return this.post("/contacts/import", params, undefined, options);
+  }
+
+  /**
+   * Exporta a base de contatos em **CSV**. `GET /contacts/export`
+   *
+   * Mesmos filtros de {@link listContacts} (sem `offset`; `limit` é o teto de
+   * linhas). Devolve o **texto CSV cru** — colunas
+   * `phone,name,email,status,source,tags,groups,created_at,last_activity_at`,
+   * com tags/grupos unidos por `;` e datas RFC 3339 em UTC. É a única rota da
+   * SDK que não responde JSON: grave direto num arquivo ou passe para o seu
+   * parser de CSV.
+   *
+   * @example
+   * ```ts
+   * import { writeFile } from "node:fs/promises";
+   * const csv = await bz.exportContacts({ tags: ["vip"], status: "active" });
+   * await writeFile("contatos.csv", csv, "utf8");
+   * ```
+   */
+  async exportContacts(params: ExportContactsParams = {}, options?: RequestOptions): Promise<string> {
+    return this.http.call<string>(
       {
-        search: params.search,
-        tags: params.tags,
-        tags_match: params.tags_match,
-        groups: params.groups,
-        project_id: params.project_id,
-        instance_id: params.instance_id,
-        status: params.status,
-        city: params.city,
-        state: params.state,
-        country: params.country,
-        zip: params.zip,
-        document: params.document,
-        has_email: params.has_email,
-        last_activity_after: params.last_activity_after,
-        last_activity_before: params.last_activity_before,
-        created_after: params.created_after,
-        created_before: params.created_before,
-        sort: params.sort,
-        limit: params.limit,
-        offset: params.offset,
+        method: "GET",
+        path: "/contacts/export",
+        query: contactFilterQuery(params),
+        accept: "text",
+        headers: { Accept: "text/csv" },
       },
       options,
     );
@@ -1226,6 +1282,34 @@ export class Bzapper {
   private delete<T>(path: string, query?: Query, options?: RequestOptions): Promise<T> {
     return this.http.call<T>({ method: "DELETE", path, query }, options);
   }
+}
+
+/**
+ * Filtros compartilhados por `GET /contacts` e `GET /contacts/export` (a spec
+ * declara os mesmos parâmetros nas duas rotas). `offset` é só da listagem.
+ */
+function contactFilterQuery(params: ExportContactsParams): Query {
+  return {
+    search: params.search,
+    tags: params.tags,
+    tags_match: params.tags_match,
+    groups: params.groups,
+    project_id: params.project_id,
+    instance_id: params.instance_id,
+    status: params.status,
+    city: params.city,
+    state: params.state,
+    country: params.country,
+    zip: params.zip,
+    document: params.document,
+    has_email: params.has_email,
+    last_activity_after: params.last_activity_after,
+    last_activity_before: params.last_activity_before,
+    created_after: params.created_after,
+    created_before: params.created_before,
+    sort: params.sort,
+    limit: params.limit,
+  };
 }
 
 /** Factory equivalente a `new Bzapper(options)`. */

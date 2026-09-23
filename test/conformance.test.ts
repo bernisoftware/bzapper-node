@@ -205,6 +205,7 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   contactsCheck: ({ bz, opts }, a) => bz.contactsCheck(a.body, opts),
   listContacts: ({ bz, opts }, a) => bz.listContacts(a.query, opts),
   createContact: ({ bz, opts }, a) => bz.createContact(a.body, opts),
+  importContacts: ({ bz, opts }, a) => bz.importContacts(a.body, opts),
   getContact: ({ bz, opts }, a) => bz.getContact(a.path.id, opts),
   updateContact: ({ bz, opts }, a) => bz.updateContact(a.path.id, a.body, opts),
   deleteContact: ({ bz, opts }, a) => bz.deleteContact(a.path.id, opts),
@@ -250,6 +251,7 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   listMyKeys: ({ bz, opts }) => bz.listKeys(opts),
   createMyKey: ({ bz, opts }, a) => bz.createKey(a.body, opts),
   revokeMyKey: ({ bz, opts }, a) => bz.revokeKey(a.path.id, opts),
+  rotateMyKey: ({ bz, opts }, a) => bz.rotateKey(a.path.id, a.body, opts),
 
   // cobrança
   getMyEntitlements: ({ bz, opts }) => bz.getMyEntitlements(opts),

@@ -205,6 +205,12 @@ export interface RequestSpec {
   fields?: Record<string, string>;
   /** Headers extras (legado; prefira `options`). */
   headers?: Record<string, string>;
+  /**
+   * Corpo de sucesso esperado. `"json"` (padrão) faz o parse e devolve o objeto;
+   * `"text"` devolve o texto cru, sem tentar JSON — é o caso das rotas que
+   * respondem `text/csv` (`exportContacts`). Erros continuam JSON nos dois casos.
+   */
+  accept?: "json" | "text";
 }
 
 /**
@@ -330,6 +336,8 @@ export class HttpTransport {
       }
 
       if (res.status >= 200 && res.status < 300) {
+        // Rotas de texto (CSV): o corpo cru É o resultado — nunca INVALID_RESPONSE.
+        if (spec.accept === "text") return res.text as T;
         // 204 No Content e corpos vazios.
         if (res.text.trim() === "") return undefined as T;
         try {

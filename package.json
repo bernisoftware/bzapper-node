@@ -1,6 +1,6 @@
 {
   "name": "@bzapper/client",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "SDK oficial do bZapper para Node/TypeScript — gateway de WhatsApp multi-tenant.",
   "license": "MIT",
   "author": "Berni Software",
@@ -12,10 +12,19 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "bzapper": "./bin/bzapper.mjs"
   },
   "files": [
     "dist",
+    "bin",
     "README.md",
     "LICENSE"
   ],
@@ -35,7 +44,9 @@
     "sdk",
     "client",
     "messaging",
-    "api"
+    "api",
+    "webhooks",
+    "cli"
   ],
   "repository": {
     "type": "git",
