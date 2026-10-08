@@ -146,6 +146,11 @@ export interface SendLocationParams extends SendBase {
 
 export interface SendContactParams extends SendBase {
   contact_name?: string;
+  /**
+   * Telefone (E.164) do contato COMPARTILHADO no cartão — nunca o destino.
+   * Obrigatório junto de `contact_name`; dispensável com `contact_vcard` pronto.
+   */
+  contact_phone?: string;
   contact_vcard?: string;
 }
 
