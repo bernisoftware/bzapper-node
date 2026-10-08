@@ -8,7 +8,9 @@
 # remove a publicação direta por token granular em janeiro de 2027. OIDC não tem segredo
 # para vazar nem validade para vencer.
 #
-# Requisito: npm >= 11.5.1 (o Node 20 traz o 10.x), por isso o passo que atualiza o npm.
+# Requisito: npm >= 11.5.1, que é o que o Node 24 já traz embutido — por isso o job de
+# publicação usa 24 (a suíte continua rodando no mínimo suportado, 18, e no 22). Instalar
+# `npm@latest` à mão não serve: o npm 12 exige Node >= 22.22 e o runner do Node 20 recusa.
 #
 # Só publica com a suíte verde (conformidade + unitários) no Node mínimo (18) e atual (22),
 # rodando contra o artefato CONSTRUÍDO (os testes importam "@bzapper/client" → dist/), e com a
@@ -17,6 +19,9 @@ name: publish
 on:
   push:
     tags: ['v*']
+  # Manual: publica a versão que está no package.json deste ref. Existe porque, quando a
+  # tag já foi criada, consertar o próprio workflow exigiria apagar e recriar a tag.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -48,10 +53,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      # O OIDC do npm vive no CLI: sem esta linha o publish cai no fluxo de token.
-      - run: npm install -g npm@latest
+          node-version: '24' # traz npm 11.x, que é o que fala OIDC
       - name: tag == package.json
+        if: github.ref_type == 'tag'
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           PKG="$(node -p "require('./package.json').version")"
