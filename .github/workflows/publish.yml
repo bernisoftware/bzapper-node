@@ -1,5 +1,14 @@
 # Publica @bzapper/client no npmjs ao dar push de uma tag vX.Y.Z no repo público
-# bernisoftware/bzapper-node. Requer secret NPM_TOKEN (Automation token do org @bzapper).
+# bernisoftware/bzapper-node.
+#
+# SEM TOKEN: publica por Trusted Publishing (OIDC), como o NuGet e o RubyGems já fazem.
+# O npm confia neste repositório + este arquivo de workflow, cadastrados em
+# npmjs.com → @bzapper/client → Settings → Trusted publisher. Por que não token: a conta
+# exige 2FA na publicação, então um token só publicaria com "bypass 2FA" marcado — e o npm
+# remove a publicação direta por token granular em janeiro de 2027. OIDC não tem segredo
+# para vazar nem validade para vencer.
+#
+# Requisito: npm >= 11.5.1 (o Node 20 traz o 10.x), por isso o passo que atualiza o npm.
 #
 # Só publica com a suíte verde (conformidade + unitários) no Node mínimo (18) e atual (22),
 # rodando contra o artefato CONSTRUÍDO (os testes importam "@bzapper/client" → dist/), e com a
@@ -40,7 +49,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+      # O OIDC do npm vive no CLI: sem esta linha o publish cai no fluxo de token.
+      - run: npm install -g npm@latest
       - name: tag == package.json
         run: |
           TAG="${GITHUB_REF_NAME#v}"
@@ -53,5 +63,3 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
