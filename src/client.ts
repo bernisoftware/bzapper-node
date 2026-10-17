@@ -104,6 +104,7 @@ import type {
   OfficialSignupResult,
   SendTemplateParams,
   SetFallbackTemplateParams,
+  OTPTemplate,
   Template,
   TemplateList,
   TemplateSpec,
@@ -855,6 +856,23 @@ export class Bzapper {
    */
   async uploadTemplateMedia(file: FileUpload, options?: RequestOptions): Promise<MediaUploaded> {
     return this.http.call({ method: "POST", path: "/templates/media", file }, options);
+  }
+
+  /**
+   * Template que leva o código de `sendOTP` fora da janela e a elegibilidade da
+   * conta para a categoria Autenticação. `GET /templates/otp`
+   */
+  async getOTPTemplate(options?: RequestOptions): Promise<OTPTemplate> {
+    return this.get("/templates/otp", undefined, options);
+  }
+
+  /**
+   * Escolhe o template de Autenticação APROVADO que leva o código fora da janela
+   * (422 `template_not_authentication` em outra categoria). `template_id` vazio limpa.
+   * `PUT /templates/otp`
+   */
+  async setOTPTemplate(params: { template_id?: string }, options?: RequestOptions): Promise<void> {
+    return this.put("/templates/otp", params, undefined, options);
   }
 
   /** Devolve o template de alternativa do projeto (`template: null` se não houver). `GET /templates/fallback` */

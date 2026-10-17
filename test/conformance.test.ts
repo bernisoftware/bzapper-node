@@ -197,6 +197,8 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   deleteTemplate: ({ bz, opts }, a) => bz.deleteTemplate(a.path.id, opts),
   syncTemplates: ({ bz, opts }) => bz.syncTemplates(opts),
   uploadTemplateMedia: ({ bz, opts }, a) => bz.uploadTemplateMedia(file(a.body), opts),
+  getOTPTemplate: ({ bz, opts }) => bz.getOTPTemplate(opts),
+  setOTPTemplate: ({ bz, opts }, a) => bz.setOTPTemplate(a.body, opts),
   getFallbackTemplate: ({ bz, opts }) => bz.getFallbackTemplate(opts),
   setFallbackTemplate: ({ bz, opts }, a) => bz.setFallbackTemplate(a.body, opts),
 

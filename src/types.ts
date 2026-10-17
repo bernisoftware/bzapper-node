@@ -1944,6 +1944,22 @@ export interface TemplateSyncResult {
 }
 
 /** `GET /templates/fallback` */
+/** O que a Meta exige para liberar templates de Autenticação, com o estado de cada critério. */
+export interface OTPEligibility {
+  business_verification: string;
+  messaging_limit: string;
+  required_limit: string;
+  verification_ok: boolean;
+  limit_ok: boolean;
+  approved_auth_templates: number;
+}
+
+export interface OTPTemplate {
+  /** `null` quando nenhum foi escolhido (vale o primeiro de Autenticação aprovado). */
+  template: Template | null;
+  eligibility: OTPEligibility;
+}
+
 export interface FallbackTemplate {
   /** `null` quando não há alternativa configurada. */
   template: Template | null;

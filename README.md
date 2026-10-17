@@ -16,7 +16,7 @@ npm i @bzapper/client
 
 Requer **Node 18+** (fetch nativo).
 
-**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.9.2"`, sem `^`): cada release
+**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.9.3"`, sem `^`): cada release
 declara nas notas se muda a superfície pública ou se é só aditiva.
 
 ## Hello world
@@ -645,7 +645,7 @@ npx @bzapper/client listen --forward-to http://localhost:3000/webhooks/bzapper
 ```
 
 ```
-bZapper v0.9.2 — relay de webhooks para o localhost
+bZapper v0.9.3 — relay de webhooks para o localhost
   ouvindo    https://api.bzapper.com.br/webhooks/listen
   reenviando http://localhost:3000/webhooks/bzapper
   secret     whsec_Hs3…
