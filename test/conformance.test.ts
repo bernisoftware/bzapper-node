@@ -117,6 +117,7 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   sendButtons: ({ bz, opts }, a) => bz.sendButtons(a.body, opts),
   sendList: ({ bz, opts }, a) => bz.sendList(a.body, opts),
   sendOTP: ({ bz, opts }, a) => bz.sendOTP(a.body, opts),
+  sendTemplate: ({ bz, opts }, a) => bz.sendTemplate(a.body, opts),
   editMessage: ({ bz, opts }, a) => bz.editMessage(a.path.id, a.body, opts),
   revokeMessage: ({ bz, opts }, a) => bz.revokeMessage(a.path.id, a.query, opts),
   forwardMessage: ({ bz, opts }, a) => bz.forwardMessage(a.body, opts),
@@ -166,6 +167,37 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   getOfficialAccount: ({ bz, opts }) => bz.getOfficialAccount(opts),
   connectOfficialAccount: ({ bz, opts }, a) => bz.connectOfficialAccount(a.body, opts),
   disconnectOfficialAccount: ({ bz, opts }) => bz.disconnectOfficialAccount(opts),
+  getOfficialStatus: ({ bz, opts }) => bz.getOfficialStatus(opts),
+  getOfficialSignupConfig: ({ bz, opts }) => bz.getOfficialSignupConfig(opts),
+  completeOfficialSignup: ({ bz, opts }, a) => bz.completeOfficialSignup(a.body, opts),
+  uploadOfficialMedia: ({ bz, opts }, a) => bz.uploadOfficialMedia(file(a.body), { instance_id: a.query.instance_id }, opts),
+  getOfficialMedia: ({ bz, opts }, a) => bz.getOfficialMedia(a.path.media_id, { instance_id: a.query.instance_id }, opts),
+  deleteOfficialMedia: ({ bz, opts }, a) => bz.deleteOfficialMedia(a.path.media_id, { instance_id: a.query.instance_id }, opts),
+  listMetaWebhookEvents: ({ bz, opts }, a) => bz.listMetaWebhookEvents({ limit: a.query.limit, before: a.query.before }, opts),
+  listOfficialNumbers: ({ bz, opts }) => bz.listOfficialNumbers(opts),
+  listAvailableOfficialNumbers: ({ bz, opts }) => bz.listAvailableOfficialNumbers(opts),
+  addOfficialNumber: ({ bz, opts }, a) => bz.addOfficialNumber(a.body, opts),
+  setDefaultOfficialNumber: ({ bz, opts }, a) => bz.setDefaultOfficialNumber(a.path.id, opts),
+  disconnectOfficialNumber: ({ bz, opts }, a) => bz.disconnectOfficialNumber(a.path.id, opts),
+  getOfficialProfile: ({ bz, opts }) => bz.getOfficialProfile(opts),
+  updateOfficialProfile: ({ bz, opts }, a) => bz.updateOfficialProfile(a.body, opts),
+  uploadOfficialProfilePhoto: ({ bz, opts }, a) => bz.uploadOfficialProfilePhoto(file(a.body), opts),
+  reregisterOfficialProfile: ({ bz, opts }) => bz.reregisterOfficialProfile(opts),
+  getOfficialNumberProfile: ({ bz, opts }, a) => bz.getOfficialNumberProfile(a.path.id, opts),
+  updateOfficialNumberProfile: ({ bz, opts }, a) => bz.updateOfficialNumberProfile(a.path.id, a.body, opts),
+  uploadOfficialNumberProfilePhoto: ({ bz, opts }, a) =>
+    bz.uploadOfficialNumberProfilePhoto(a.path.id, file(a.body), opts),
+  reregisterOfficialNumberProfile: ({ bz, opts }, a) => bz.reregisterOfficialNumberProfile(a.path.id, opts),
+
+  // templates (trilho oficial)
+  listTemplates: ({ bz, opts }) => bz.listTemplates(opts),
+  createTemplate: ({ bz, opts }, a) => bz.createTemplate(a.body, opts),
+  getTemplate: ({ bz, opts }, a) => bz.getTemplate(a.path.id, opts),
+  deleteTemplate: ({ bz, opts }, a) => bz.deleteTemplate(a.path.id, opts),
+  syncTemplates: ({ bz, opts }) => bz.syncTemplates(opts),
+  uploadTemplateMedia: ({ bz, opts }, a) => bz.uploadTemplateMedia(file(a.body), opts),
+  getFallbackTemplate: ({ bz, opts }) => bz.getFallbackTemplate(opts),
+  setFallbackTemplate: ({ bz, opts }, a) => bz.setFallbackTemplate(a.body, opts),
 
   // conversas e chats
   listConversations: ({ bz, opts }, a) => bz.listConversations(a.query.instance_id, opts),
@@ -277,11 +309,13 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   deleteWebhook: ({ bz, opts }, a) => bz.deleteWebhook(a.path.id, opts),
   testWebhook: ({ bz, opts }, a) => bz.testWebhook(a.path.id, a.body?.event_type, opts),
   listWebhookDeliveries: ({ bz, opts }, a) => bz.webhookDeliveries(a.path.id, a.query.limit, opts),
+  redeliverWebhookDelivery: ({ bz, opts }, a) => bz.redeliverWebhookDelivery(a.path.id, a.path.delivery_id, opts),
   triggerWebhookEvent: ({ bz, opts }, a) => bz.triggerWebhook(a.body?.event_type, opts),
 
   // bZapper Connect — lado do cliente
   listConnectedApps: ({ bz, opts }) => bz.listConnectedApps(opts),
   revokeConnectedApp: ({ bz, opts }, a) => bz.revokeConnectedApp(a.path.id, opts),
+  convertConnectedAppToStandalone: ({ bz, opts }, a) => bz.convertConnectedAppToStandalone(a.path.id, opts),
 
   // bZapper Connect — parceiro (BzapperPartner)
   getPartnerMe: ({ partner, opts }) => partner.me(opts),

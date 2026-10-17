@@ -16,7 +16,7 @@ npm i @bzapper/client
 
 Requer **Node 18+** (fetch nativo).
 
-**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.8.2"`, sem `^`): cada release
+**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.9.0"`, sem `^`): cada release
 declara nas notas se muda a superfície pública ou se é só aditiva.
 
 ## Hello world
@@ -269,9 +269,48 @@ await bz.getHealth();             // { status: "ok", version }
 ### API oficial (WhatsApp Cloud API)
 
 ```ts
-await bz.connectOfficialAccount({ waba_id: "…", phone_number_id: "…", access_token: "…" });
+// Conexão: Embedded Signup (normal) ou credenciais manuais (phone_number_id opcional).
+const { enabled, app_id, config_id } = await bz.getOfficialSignupConfig();
+const { account, warning } = await bz.completeOfficialSignup({ code, waba_id: "…" });
+await bz.connectOfficialAccount({ waba_id: "…", access_token: "…" });
 const official = await bz.getOfficialAccount();
-await bz.disconnectOfficialAccount();
+const { can_send, live } = await bz.getOfficialStatus(); // conferido ao vivo na Meta
+
+// Vários números na mesma conta comercial.
+const { numbers: available } = await bz.listAvailableOfficialNumbers();
+const added = await bz.addOfficialNumber({ phone_number_id: available[0].id! });
+const { numbers } = await bz.listOfficialNumbers(); // cada um com instance_id e is_default
+await bz.setDefaultOfficialNumber(added.id!);
+await bz.disconnectOfficialNumber(added.id!); // UM número; o histórico fica
+
+// Perfil comercial (envie o perfil INTEIRO: campo vazio limpa na Meta).
+const profile = await bz.getOfficialProfile();
+await bz.updateOfficialProfile({ ...profile, about: "Atendimento 24/7" });
+await bz.uploadOfficialProfilePhoto(await fileFromPath("./logo.png", "image/png"));
+await bz.reregisterOfficialProfile(); // depois que a Meta aprova um nome novo
+// Por número: getOfficialNumberProfile / updateOfficialNumberProfile /
+// uploadOfficialNumberProfilePhoto / reregisterOfficialNumberProfile (id do número).
+
+// Templates: validados ANTES de ir para a Meta; a decisão chega por webhook.
+const { url } = await bz.uploadTemplateMedia(await fileFromPath("./amostra.png", "image/png"));
+const { template, advice } = await bz.createTemplate({
+  name: "pedido_enviado",
+  language: "pt_BR",
+  category: "UTILITY",
+  header: { type: "image", media_url: url },
+  body: { text: "Olá {{1}}, seu pedido {{2}} saiu para entrega.", example: ["Ana", "#123"] },
+});
+const { templates } = await bz.listTemplates();
+await bz.syncTemplates(); // importa os que existem só na Meta
+await bz.sendTemplate({ to: "+5511999999999", template: "pedido_enviado", variables: ["Ana", "#123"] });
+
+// Alternativa: com a janela de 24h fechada, o sendText sai como este template
+// e a resposta conta o desvio em `delivery` ({ via: "template_fallback", template, note }).
+await bz.setFallbackTemplate({ template_id: template!.id });
+const sent = await bz.sendText({ to: "+5511999999999", body: "Oi!" });
+if (sent.delivery) console.log(sent.delivery.note);
+
+await bz.disconnectOfficialAccount(); // TODOS os números
 ```
 
 ### Pools (rotação entre números)
@@ -459,7 +498,7 @@ const camp = await bz.createCampaign({
   variations: [{ body: "Oi {nome}! {Oferta|Promoção} só hoje." }],
 });
 await bz.addCampaignRecipients(camp.id, { contact_filter: { tags: ["vip"] } });
-await bz.getCampaignEligibility();          // números aptos (conexão + aquecimento)
+await bz.getCampaignEligibility();          // números aptos (conexão e tempo de conexão)
 const dry = await bz.dryRunCampaign(camp.id);
 console.log(dry.estimated_human, dry.warnings);
 await bz.startCampaign(camp.id);
@@ -606,7 +645,7 @@ npx @bzapper/client listen --forward-to http://localhost:3000/webhooks/bzapper
 ```
 
 ```
-bZapper v0.8.2 — relay de webhooks para o localhost
+bZapper v0.9.0 — relay de webhooks para o localhost
   ouvindo    https://api.bzapper.com.br/webhooks/listen
   reenviando http://localhost:3000/webhooks/bzapper
   secret     whsec_Hs3…

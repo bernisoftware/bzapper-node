@@ -57,6 +57,10 @@ import type {
   CreateWebhookParams,
   WebhookTestResult,
   WebhookDeliveryList,
+  WebhookRedelivery,
+  MetaWebhookEventList,
+  OfficialMedia,
+  OfficialMediaInfo,
   SendPollParams,
   SendReactionParams,
   SendTextParams,
@@ -73,6 +77,7 @@ import type {
   CampaignDryRun,
   CampaignEstimate,
   EstimateCampaignParams,
+  PartnerConnection,
   PartnerConnectionList,
   // r2
   AccountUpdated,
@@ -85,6 +90,23 @@ import type {
   CheckoutAddonCartParams,
   CheckoutResult,
   ConnectOfficialAccountParams,
+  // templates + trilho oficial
+  AddOfficialNumberParams,
+  BusinessProfile,
+  CompleteOfficialSignupParams,
+  CreateTemplateResult,
+  FallbackTemplate,
+  MetaPhoneNumberList,
+  OfficialNumberList,
+  OfficialReadiness,
+  OfficialSignupConfig,
+  OfficialSignupResult,
+  SendTemplateParams,
+  SetFallbackTemplateParams,
+  Template,
+  TemplateList,
+  TemplateSpec,
+  TemplateSyncResult,
   ContactHistoryList,
   ContactImportResult,
   ContactNoteParams,
@@ -287,6 +309,19 @@ export class Bzapper {
     return this.send("/messages/list", params, options);
   }
 
+  /**
+   * Envia um template APROVADO pelo nome. `POST /messages/template`
+   *
+   * SÓ NO TRILHO OFICIAL (WhatsApp Cloud API) — é o único jeito de iniciar
+   * conversa fora da janela de 24h. Você passa o NOME e os valores; o id da Meta
+   * nunca aparece. `language` pode ser omitido quando o nome existe num só
+   * idioma (senão 409 `template_ambiguous`). A quantidade de `variables` tem que
+   * bater com o corpo aprovado — a API confere antes de gastar a chamada.
+   */
+  async sendTemplate(params: SendTemplateParams, options?: SendOptions): Promise<MessageQueued> {
+    return this.send("/messages/template", params, options);
+  }
+
   /** Edita o texto de uma mensagem enviada. `PATCH /messages/{id}` */
   async editMessage(id: string, params: EditMessageParams, options?: RequestOptions): Promise<WAMessageRef> {
     return this.patch(`/messages/${p(id)}`, params, undefined, options);
@@ -404,7 +439,7 @@ export class Bzapper {
     );
   }
 
-  /** Elegibilidade de cada número para campanhas (conexão + aquecimento). `GET /campaigns/eligibility` */
+  /** Elegibilidade de cada número para campanhas (conexão e tempo de conexão). `GET /campaigns/eligibility` */
   async getCampaignEligibility(
     params: CampaignEligibilityParams = {},
     options?: RequestOptions,
@@ -541,14 +576,293 @@ export class Bzapper {
     return this.get("/official/account", undefined, options);
   }
 
-  /** Conecta uma conta WhatsApp Business (credenciais manuais). `POST /official/account` */
+  /**
+   * Conecta (ou reconecta) uma conta WhatsApp Business com credenciais manuais.
+   * `POST /official/account`
+   *
+   * Chamar de novo substitui as credenciais (é a reconexão quando o token é
+   * revogado). `phone_number_id` é opcional: sem ele o número é descoberto pela
+   * WABA; se ela tiver mais de um, volta 409 com a lista em `error.body.numbers`.
+   * O caminho normal é o Embedded Signup ({@link completeOfficialSignup}).
+   */
   async connectOfficialAccount(params: ConnectOfficialAccountParams, options?: RequestOptions): Promise<OfficialAccount> {
     return this.post("/official/account", params, undefined, options);
   }
 
-  /** Desconecta a conta WhatsApp Business do projeto. `DELETE /official/account` */
+  /** Desconecta a conta WhatsApp Business do projeto (TODOS os números). `DELETE /official/account` */
   async disconnectOfficialAccount(options?: RequestOptions): Promise<void> {
     return this.delete("/official/account", undefined, options);
+  }
+
+  /**
+   * O que já está pronto e o que falta, conferido ao vivo contra a Meta.
+   * `GET /official/status`
+   *
+   * `can_send` é a única pergunta que interessa. `live` falso quer dizer que
+   * não deu para falar com a Meta e os valores são os últimos conhecidos.
+   */
+  async getOfficialStatus(options?: RequestOptions): Promise<OfficialReadiness> {
+    return this.get("/official/status", undefined, options);
+  }
+
+  /**
+   * O que o navegador precisa para abrir o Embedded Signup da Meta (ids públicos
+   * do app e da configuração). `enabled` falso = sem Embedded Signup nesta
+   * instalação; ofereça o caminho manual. `GET /official/signup-config`
+   */
+  async getOfficialSignupConfig(options?: RequestOptions): Promise<OfficialSignupConfig> {
+    return this.get("/official/signup-config", undefined, options);
+  }
+
+  /**
+   * Conclui a conexão com o `code` devolvido pelo popup da Meta.
+   * `POST /official/embedded-signup`
+   *
+   * Troca o código por um token duradouro, inscreve o app nos webhooks da WABA
+   * e registra o número na Cloud API. O código expira ~30 s depois que o popup
+   * fecha — envie direto. Um passo não fatal que falhe volta em `warning`, sem
+   * perder a conexão.
+   */
+  async completeOfficialSignup(
+    params: CompleteOfficialSignupParams,
+    options?: RequestOptions,
+  ): Promise<OfficialSignupResult> {
+    return this.post("/official/embedded-signup", params, undefined, options);
+  }
+
+  /**
+   * Lista os números conectados ao projeto. `GET /official/numbers`
+   *
+   * A Meta permite vários números na mesma conta comercial. Cada um tem um
+   * `instance_id` — o mesmo valor que se informa no envio para escolher por
+   * qual número a mensagem sai, exatamente como no trilho não oficial. O
+   * marcado `is_default` envia quando o pedido não escolhe um.
+   */
+  async listOfficialNumbers(options?: RequestOptions): Promise<OfficialNumberList> {
+    return this.get("/official/numbers", undefined, options);
+  }
+
+  /**
+   * Sobe um arquivo à Meta uma vez, pelo número padrão (ou `instance_id`), e
+   * devolve o `id` para reaproveitar como `media.id` em muitos envios — a mesma
+   * imagem numa campanha inteira sem subir a cada mensagem. Vale 30 dias, do
+   * mesmo número. `POST /official/media`
+   */
+  async uploadOfficialMedia(file: FileUpload, params: { instance_id?: string } = {}, options?: RequestOptions): Promise<OfficialMedia> {
+    return this.http.call({ method: "POST", path: "/official/media", file, query: { instance_id: params.instance_id } }, options);
+  }
+
+  /** Confere se um id de mídia ainda vale (404 `media_not_found` depois de 30 dias). `GET /official/media/{media_id}` */
+  async getOfficialMedia(mediaId: string, params: { instance_id?: string } = {}, options?: RequestOptions): Promise<OfficialMediaInfo> {
+    return this.get(`/official/media/${p(mediaId)}`, { instance_id: params.instance_id }, options);
+  }
+
+  /** Apaga da Meta um arquivo guardado antes de vencer. `DELETE /official/media/{media_id}` */
+  async deleteOfficialMedia(mediaId: string, params: { instance_id?: string } = {}, options?: RequestOptions): Promise<void> {
+    await this.http.call({ method: "DELETE", path: `/official/media/${p(mediaId)}`, query: { instance_id: params.instance_id } }, options);
+  }
+
+  /**
+   * Eventos crus que a Meta mandou para as contas do projeto, do mais novo ao
+   * mais antigo — o lado "Meta → bZapper" dos webhooks, com o estado do
+   * processamento. Passe o último `id` em `before` para paginar.
+   * `GET /official/webhook-events` (operationId `listMetaWebhookEvents`)
+   */
+  async listMetaWebhookEvents(params: { limit?: number; before?: number } = {}, options?: RequestOptions): Promise<MetaWebhookEventList> {
+    return this.get("/official/webhook-events", { limit: params.limit, before: params.before }, options);
+  }
+
+  /**
+   * Números da conta comercial que ainda não estão conectados ao projeto (o que
+   * alimenta "adicionar número"). `GET /official/numbers/available`
+   */
+  async listAvailableOfficialNumbers(options?: RequestOptions): Promise<MetaPhoneNumberList> {
+    return this.get("/official/numbers/available", undefined, options);
+  }
+
+  /**
+   * Conecta mais um número da mesma conta comercial. `POST /official/numbers`
+   *
+   * Reaproveita a autorização já guardada (ela é da conta, não do número). Pegue
+   * o id em {@link listAvailableOfficialNumbers}; o número é conferido na Meta
+   * antes de salvar, então id errado falha aqui e não no primeiro envio.
+   */
+  async addOfficialNumber(params: AddOfficialNumberParams, options?: RequestOptions): Promise<OfficialAccount> {
+    return this.post("/official/numbers", params, undefined, options);
+  }
+
+  /**
+   * Escolhe o número que envia quando o pedido não indica um.
+   * `PUT /official/numbers/{id}/default`
+   */
+  async setDefaultOfficialNumber(id: string, options?: RequestOptions): Promise<void> {
+    return this.put(`/official/numbers/${p(id)}/default`, undefined, undefined, options);
+  }
+
+  /**
+   * Desconecta UM número; o histórico de conversas fica (o número espelho é
+   * arquivado). Remover o padrão promove o mais antigo dos restantes.
+   * `DELETE /official/numbers/{id}`
+   */
+  async disconnectOfficialNumber(id: string, options?: RequestOptions): Promise<void> {
+    return this.delete(`/official/numbers/${p(id)}`, undefined, options);
+  }
+
+  /**
+   * Lê o perfil comercial do número padrão do projeto (o que o cliente final vê
+   * ao abrir a conversa). O perfil é do NÚMERO, não da conta — com vários
+   * números, use {@link getOfficialNumberProfile}. `GET /official/profile`
+   */
+  async getOfficialProfile(options?: RequestOptions): Promise<BusinessProfile> {
+    return this.get("/official/profile", undefined, options);
+  }
+
+  /**
+   * Atualiza o perfil comercial do número padrão do projeto. `PUT /official/profile`
+   *
+   * Validado contra os limites da Meta ANTES de enviar (recado 139, descrição
+   * 512, endereço 256, até 2 sites, setor de lista fechada). Envie o perfil
+   * INTEIRO: campo vazio não é "sem mudança", ele limpa o campo na Meta.
+   */
+  async updateOfficialProfile(params: BusinessProfile, options?: RequestOptions): Promise<BusinessProfile> {
+    return this.put("/official/profile", params, undefined, options);
+  }
+
+  /**
+   * Troca a foto de perfil do número padrão do projeto (multipart, JPEG/PNG até
+   * 5 MB; a Meta recomenda 640x640). `POST /official/profile/photo`
+   *
+   * Devolve o perfil atualizado, ou `null` quando a API responde 204.
+   */
+  async uploadOfficialProfilePhoto(file: FileUpload, options?: RequestOptions): Promise<BusinessProfile | null> {
+    return this.http.call({ method: "POST", path: "/official/profile/photo", file }, options);
+  }
+
+  /**
+   * Re-registra o número padrão na Cloud API — o passo esquecido depois que a
+   * Meta aprova um nome de exibição novo (sem ele, o número segue mostrando o
+   * antigo). Já registrado conta como sucesso. `POST /official/profile/reregister`
+   */
+  async reregisterOfficialProfile(options?: RequestOptions): Promise<void> {
+    return this.post("/official/profile/reregister", undefined, undefined, options);
+  }
+
+  /** Lê o perfil comercial de um número conectado (`id` de {@link listOfficialNumbers}). `GET /official/numbers/{id}/profile` */
+  async getOfficialNumberProfile(id: string, options?: RequestOptions): Promise<BusinessProfile> {
+    return this.get(`/official/numbers/${p(id)}/profile`, undefined, options);
+  }
+
+  /**
+   * Atualiza o perfil comercial de um número conectado. Mesmas regras de
+   * {@link updateOfficialProfile}: envie o perfil INTEIRO.
+   * `PUT /official/numbers/{id}/profile`
+   */
+  async updateOfficialNumberProfile(
+    id: string,
+    params: BusinessProfile,
+    options?: RequestOptions,
+  ): Promise<BusinessProfile> {
+    return this.put(`/official/numbers/${p(id)}/profile`, params, undefined, options);
+  }
+
+  /**
+   * Troca a foto de perfil de um número conectado (multipart, JPEG/PNG até 5 MB).
+   * Devolve o perfil atualizado, ou `null` em 204. `POST /official/numbers/{id}/profile/photo`
+   */
+  async uploadOfficialNumberProfilePhoto(
+    id: string,
+    file: FileUpload,
+    options?: RequestOptions,
+  ): Promise<BusinessProfile | null> {
+    return this.http.call({ method: "POST", path: `/official/numbers/${p(id)}/profile/photo`, file }, options);
+  }
+
+  /** Re-registra um número conectado na Cloud API (após aprovação de nome novo). `POST /official/numbers/{id}/profile/reregister` */
+  async reregisterOfficialNumberProfile(id: string, options?: RequestOptions): Promise<void> {
+    return this.post(`/official/numbers/${p(id)}/profile/reregister`, undefined, undefined, options);
+  }
+
+  // -------------------------------------------------------------------------
+  // Templates (trilho oficial)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Lista os templates do projeto. `GET /templates`
+   *
+   * Cada item traz `status` e `variables` — quantos valores o corpo espera, e
+   * portanto quantos você tem que enviar.
+   */
+  async listTemplates(options?: RequestOptions): Promise<TemplateList> {
+    return this.get("/templates", undefined, options);
+  }
+
+  /**
+   * Cria um template e o submete à análise da Meta. `POST /templates`
+   *
+   * A validação acontece ANTES de submeter, e é aí que este método se paga: a
+   * Meta leva até 24h para responder, reprova com um motivo lacônico e limita
+   * quantos templates se pode submeter. Variável no começo ou no fim do corpo,
+   * numeração que pula, variáveis coladas, exemplo faltando — cada um volta
+   * como 422 com uma mensagem que diz o que consertar.
+   *
+   * `advice` traz o que não bloqueou a submissão mas muda o desfecho. A decisão
+   * chega depois pelos webhooks `template.approved` / `template.rejected`.
+   */
+  async createTemplate(params: TemplateSpec, options?: RequestOptions): Promise<CreateTemplateResult> {
+    return this.post("/templates", params, undefined, options);
+  }
+
+  /** Detalha um template. `GET /templates/{id}` */
+  async getTemplate(id: string, options?: RequestOptions): Promise<Template> {
+    return this.get(`/templates/${p(id)}`, undefined, options);
+  }
+
+  /**
+   * Apaga o template aqui e na Meta. `DELETE /templates/{id}`
+   *
+   * A Meta apaga TODOS os idiomas de um nome de uma vez — então, se outro idioma
+   * do mesmo nome ainda está registrado aqui, a Meta não é tocada.
+   */
+  async deleteTemplate(id: string, options?: RequestOptions): Promise<void> {
+    return this.delete(`/templates/${p(id)}`, undefined, options);
+  }
+
+  /**
+   * Importa os templates que existem na Meta e não aqui. `POST /templates/sync`
+   *
+   * Serve a quem já usava a Cloud API antes do bZapper e criou templates no
+   * WhatsApp Manager, e a reparar um webhook que não chegou.
+   */
+  async syncTemplates(options?: RequestOptions): Promise<TemplateSyncResult> {
+    return this.post("/templates/sync", undefined, undefined, options);
+  }
+
+  /**
+   * Envia o arquivo de amostra do cabeçalho de mídia (multipart, JPEG/PNG/MP4/PDF
+   * até 10 MB). Passe a `url` devolvida em `header.media_url` no
+   * {@link createTemplate} — é só a amostra que a Meta analisa, não a mídia de
+   * cada envio. `POST /templates/media`
+   */
+  async uploadTemplateMedia(file: FileUpload, options?: RequestOptions): Promise<MediaUploaded> {
+    return this.http.call({ method: "POST", path: "/templates/media", file }, options);
+  }
+
+  /** Devolve o template de alternativa do projeto (`template: null` se não houver). `GET /templates/fallback` */
+  async getFallbackTemplate(options?: RequestOptions): Promise<FallbackTemplate> {
+    return this.get("/templates/fallback", undefined, options);
+  }
+
+  /**
+   * Define o template enviado quando a janela de 24h está fechada.
+   * `PUT /templates/fallback`
+   *
+   * É o que faz o mesmo `sendText` funcionar dentro e fora da janela: com a
+   * alternativa configurada, a plataforma envia este template e conta o desvio
+   * no campo `delivery` da resposta. Só template APROVADO é aceito;
+   * `template_id` vazio limpa.
+   */
+  async setFallbackTemplate(params: SetFallbackTemplateParams, options?: RequestOptions): Promise<void> {
+    return this.put("/templates/fallback", params, undefined, options);
   }
 
   // -------------------------------------------------------------------------
@@ -1229,6 +1543,15 @@ export class Bzapper {
     return this.get(`/webhooks/${p(id)}/deliveries`, { limit }, options);
   }
 
+  /**
+   * Reenvia uma entrega que FALHOU (mesmo corpo e event_id, assinada com o segredo
+   * atual). Só vale para falhas dos últimos 7 dias.
+   * `POST /webhooks/{id}/deliveries/{delivery_id}/redeliver` (operationId `redeliverWebhookDelivery`)
+   */
+  async redeliverWebhookDelivery(id: string, deliveryId: string, options?: RequestOptions): Promise<WebhookRedelivery> {
+    return this.post(`/webhooks/${p(id)}/deliveries/${p(deliveryId)}/redeliver`, undefined, undefined, options);
+  }
+
   /** Dispara um evento de teste no stream do projeto (relay). `POST /webhooks/trigger` (operationId `triggerWebhookEvent`) */
   async triggerWebhook(eventType?: string, options?: RequestOptions): Promise<{ event_id: string; event_type: string }> {
     return this.post("/webhooks/trigger", { event_type: eventType }, undefined, options);
@@ -1252,6 +1575,16 @@ export class Bzapper {
    */
   async revokeConnectedApp(id: string, options?: RequestOptions): Promise<void> {
     return this.delete(`/me/connections/${p(id)}`, undefined, options);
+  }
+
+  /**
+   * Converte uma conta criada por um parceiro em conta de uso geral (admin). A
+   * conexão CONTINUA: o parceiro segue funcionando e o desconto da parceria segue
+   * valendo — o que muda é que a conta passa a emitir chaves próprias. Sem volta.
+   * `POST /me/connections/{id}/standalone`
+   */
+  async convertConnectedAppToStandalone(id: string, options?: RequestOptions): Promise<PartnerConnection> {
+    return this.post(`/me/connections/${p(id)}/standalone`, undefined, undefined, options);
   }
 
   // -------------------------------------------------------------------------

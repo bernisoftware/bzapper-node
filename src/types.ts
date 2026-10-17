@@ -84,6 +84,8 @@ export interface SendOptions extends RequestOptions {
 
 /** Mídia por URL **ou** base64 (nunca os dois). */
 export interface MediaInput {
+  /** Só no oficial: id de {@link Bzapper.uploadOfficialMedia} — envia sem subir de novo (30 dias, mesmo número). */
+  id?: string;
   url?: string;
   base64?: string;
   caption?: string;
@@ -123,6 +125,44 @@ export interface CreateWebhookParams {
 export interface WebhookTestResult { event_id: string; event_type: string; status: number; delivered: boolean; error?: string }
 export interface WebhookDelivery { id: string; event_type: string; status: string; attempts: number; last_error?: string; created_at: string; updated_at: string }
 export interface WebhookDeliveryList { data: WebhookDelivery[] }
+
+/** Um evento que a Meta mandou ao bZapper, cru, com o estado do processamento. */
+export interface MetaWebhookEvent {
+  id: number;
+  received_at: string;
+  /** Campos de mudança da Meta no evento, separados por vírgula. */
+  fields: string;
+  status: "pending" | "running" | "done" | "failed";
+  attempts: number;
+  error?: string;
+  body: Record<string, unknown>;
+}
+
+export interface MetaWebhookEventList { data: MetaWebhookEvent[] }
+
+/** Arquivo guardado na Meta: reaproveite como `media.id` por 30 dias, do mesmo número. */
+export interface OfficialMedia {
+  id: string;
+  type: "image" | "sticker" | "video" | "audio" | "document";
+  mime_type: string;
+  file_size: number;
+  instance_id: string;
+  expires_at: string;
+}
+
+/** O que a Meta sabe de um arquivo guardado. */
+export interface OfficialMediaInfo { id: string; mime_type: string; sha256: string; file_size: number }
+
+/** Resultado do reenvio de uma entrega. */
+export interface WebhookRedelivery {
+  delivery_id: string;
+  event_id: string;
+  event_type: string;
+  /** Status HTTP que o seu endpoint respondeu (0 em falha de transporte). */
+  status: number;
+  delivered: boolean;
+  error?: string;
+}
 
 export interface SendOTPParams extends SendBase {
   /** O código de verificação. Enviado sozinho num balão (copiável). */
@@ -208,6 +248,23 @@ export interface MessageQueued {
   scheduled_id?: string;
   /** Instante agendado (RFC3339), quando houver. */
   scheduled_at?: string;
+  /**
+   * Presente SÓ quando a plataforma tomou um caminho diferente do pedido. Hoje
+   * isso quer dizer uma coisa: a janela de 24h com o contato estava fechada, e
+   * o texto livre saiu como o template de alternativa do projeto (trilho
+   * oficial). A plataforma decide, mas não esconde.
+   */
+  delivery?: DeliveryInfo;
+}
+
+/** Desvio tomado pela plataforma no envio (schema `DeliveryInfo`). */
+export interface DeliveryInfo {
+  /** Caminho tomado (hoje: `template_fallback`). */
+  via?: "template_fallback";
+  /** Nome do template efetivamente enviado. */
+  template?: string;
+  /** Uma frase explicando o que aconteceu, pronta para mostrar a uma pessoa. */
+  note?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,13 +278,18 @@ export interface Instance {
   /** JID do dispositivo (após parear). */
   jid?: string;
   status: InstanceStatus;
+  /**
+   * De onde o número vem: `unofficial` (pareado por QR) ou `official` (número da
+   * Meta — sem QR, sessão nem regra de tempo de conexão; o ciclo de vida fica em /official/numbers).
+   */
+  rail?: "unofficial" | "official";
   status_reason?: InstanceReason;
   /** Quando um ban TEMPORÁRIO expira (o número reconecta sozinho); ausente = permanente ou sem ban. */
   banned_until?: string | null;
   proxy_url?: string;
   tenant_id?: string;
   project_id?: string;
-  /** Início do aquecimento do número. */
+  /** Início da rampa gradual de limite de envio do número. */
   warming_started_at?: string;
   /** Saúde do número (0–100). */
   health_score?: number;
@@ -400,6 +462,17 @@ export interface Conversation {
   last_body?: string;
   last_at: string;
   unread: number;
+  /** Nome do contato, quando conhecido. */
+  name?: string;
+  avatar_url?: string;
+  /** Número (instância) que tratou a última mensagem. */
+  last_instance_id?: string;
+  /**
+   * Última mensagem DO contato. No trilho oficial ela abre a janela de 24h: texto
+   * livre passa até `last_inbound_at` + 24h; depois, só template aprovado.
+   * Ausente quando o contato nunca escreveu.
+   */
+  last_inbound_at?: string;
 }
 
 export interface ConversationList {
@@ -716,11 +789,30 @@ export interface Scheduled {
 // Campanhas (Pro + add-on de campanhas)
 // ---------------------------------------------------------------------------
 
-/** Variação do template (rotacionada). Corpo aceita {variaveis} e spintax {a|b}. */
+/**
+ * Variação da mensagem (rotacionada). No trilho não oficial é texto: o corpo
+ * aceita {variaveis} e spintax {a|b}. No OFICIAL é um template aprovado
+ * (`template`) — texto livre só alcança quem escreveu nas últimas 24h.
+ */
 export interface CampaignVariation {
+  /** Corpo de texto (trilho não oficial). Numa variação de template, deixe vazio. */
   body: string;
   weight?: number;
   media?: Record<string, unknown>;
+  template?: CampaignVariationTemplate;
+}
+
+/**
+ * Template APROVADO do projeto (trilho oficial). Conferido ao criar/editar a
+ * campanha: precisa existir, estar aprovado e ter tantas `variables` quantas o
+ * corpo espera. Cada valor aceita {coluna} da lista de destinatários.
+ */
+export interface CampaignVariationTemplate {
+  name: string;
+  /** Obrigatório só quando o template existe em mais de um idioma. */
+  language?: string;
+  variables?: string[];
+  header_variables?: string[];
 }
 
 export interface CampaignCreateParams {
@@ -821,7 +913,7 @@ export interface CampaignRecipient {
 /** Estimativa de duração de envio ao vivo (sem precisar de campanha). */
 export interface CampaignEstimate {
   recipients: number;
-  /** Números aquecidos e elegíveis agora. */
+  /** Números elegíveis agora. */
   numbers_available: number;
   estimated_seconds: number;
   /** Ex.: `2h15m0s`. */
@@ -938,6 +1030,9 @@ export interface PartnerConnection {
   suspended_at?: string | null;
   revoked_at?: string | null;
   created_at: string;
+  /** Quando o cliente converteu esta conta para uso geral. Ausente = ainda gerida
+   *  pelo parceiro, e por isso sem chave de API própria. */
+  standalone_at?: string | null;
 }
 
 /** Conexão + a API key crua do cliente (mostrada uma única vez). */
@@ -1541,16 +1636,324 @@ export interface OfficialAccount {
   quality_rating?: string;
   messaging_limit?: string;
   source?: "embedded_signup" | "manual";
+  /**
+   * Número espelho deste número oficial (em `listOfficialNumbers`): o mesmo
+   * valor que se passa em `instance_id` no envio para escolher por qual número
+   * a mensagem sai, exatamente como no trilho não oficial.
+   */
+  instance_id?: string;
+  /** Em `listOfficialNumbers`: o número que envia quando o pedido não escolhe um. */
+  is_default?: boolean;
 }
 
-/** `POST /official/account` */
+/**
+ * `POST /official/account` (schema `ConnectOfficialAccount`).
+ *
+ * Chamar de novo substitui as credenciais — é o caminho de reconexão quando o
+ * token é revogado, e nunca cria uma segunda conta no mesmo projeto.
+ */
 export interface ConnectOfficialAccountParams {
   waba_id: string;
-  phone_number_id: string;
+  /**
+   * Opcional — sem ele, o número é descoberto pela WABA. Se a WABA tiver mais
+   * de um número, a API responde 409 com a lista (`AmbiguousPhoneNumbers` em
+   * `error.body.numbers`) para o dono da conta escolher.
+   */
+  phone_number_id?: string;
+  /**
+   * Token da WABA (guardado cifrado). O token da tela "API Setup" da Meta
+   * expira em 24h; para conexão duradoura use um usuário de sistema com
+   * `whatsapp_business_messaging` + `whatsapp_business_management`.
+   */
   access_token: string;
   display_number?: string;
   verified_name?: string;
   status?: "PENDENTE" | "AGUARDANDO_PAGAMENTO" | "ATIVA";
+}
+
+/** O que já está pronto e o que falta, conferido ao vivo contra a Meta. `GET /official/status` */
+export interface OfficialReadiness {
+  connected: boolean;
+  /** A única pergunta que interessa: este projeto consegue enviar agora? */
+  can_send: boolean;
+  /** Falso = não deu para falar com a Meta; os valores são os últimos conhecidos. */
+  live: boolean;
+  /** O número concluiu a verificação por SMS/ligação. */
+  number_verified: boolean;
+  status?: OfficialAccountStatus;
+  status_reason?: string;
+  display_number?: string;
+  verified_name?: string;
+  /**
+   * Análise do nome de exibição (APPROVED, PENDING_REVIEW, REJECTED). Reprovação
+   * não bloqueia o envio — aparece o número no lugar do nome.
+   */
+  name_status?: string;
+  /** Verificação da empresa (APPROVED, PENDING). É o que libera faixas maiores de volume. */
+  business_review?: string;
+  quality_rating?: string;
+  messaging_limit?: string;
+  /** `invalid_token` (precisa reconectar) ou `meta_unavailable`. */
+  problem?: string;
+}
+
+/** Dados que o navegador precisa para abrir o Embedded Signup da Meta. `GET /official/signup-config` */
+export interface OfficialSignupConfig {
+  /** Falso = esta instalação não tem Embedded Signup; ofereça o caminho manual. */
+  enabled: boolean;
+  app_id: string;
+  config_id: string;
+  /** Ex.: `v26.0`. */
+  graph_version: string;
+}
+
+/** `POST /official/embedded-signup` */
+export interface CompleteOfficialSignupParams {
+  /** Código de uso único do callback do Embedded Signup (vale ~30 s). */
+  code: string;
+  waba_id: string;
+  /** Opcional — descoberto pela WABA quando o popup não o informa. */
+  phone_number_id?: string;
+}
+
+export interface OfficialSignupResult {
+  account?: OfficialAccount;
+  /**
+   * `webhooks_not_subscribed` ou `phone_not_registered` — conectou, mas um passo
+   * precisa de atenção (a conta fica salva de qualquer jeito; ofereça repetir).
+   */
+  warning?: "" | "webhooks_not_subscribed" | "phone_not_registered";
+}
+
+/** `GET /official/numbers` */
+export interface OfficialNumberList {
+  numbers: OfficialAccount[];
+}
+
+/** Um número da conta comercial como a Meta o informa. */
+export interface MetaPhoneNumber {
+  /** Id da Meta do número (`phone_number_id`) — é o que vai em `addOfficialNumber`. */
+  id?: string;
+  display_phone_number?: string;
+  verified_name?: string;
+  /** VERIFIED, NOT_VERIFIED ou EXPIRED. */
+  code_verification_status?: string;
+  /** Análise do nome de exibição: APPROVED, PENDING_REVIEW, REJECTED. */
+  name_status?: string;
+  quality_rating?: string;
+  messaging_limit_tier?: string;
+}
+
+/** `GET /official/numbers/available` */
+export interface MetaPhoneNumberList {
+  numbers: MetaPhoneNumber[];
+}
+
+/** `POST /official/numbers` */
+export interface AddOfficialNumberParams {
+  /** Id da Meta do número (`id` de `listAvailableOfficialNumbers`). */
+  phone_number_id: string;
+}
+
+/** Setor da empresa (lista fechada da Meta). */
+export type BusinessVertical =
+  | "UNDEFINED"
+  | "OTHER"
+  | "AUTO"
+  | "BEAUTY"
+  | "APPAREL"
+  | "EDU"
+  | "ENTERTAIN"
+  | "EVENT_PLAN"
+  | "FINANCE"
+  | "GROCERY"
+  | "GOVT"
+  | "HOTEL"
+  | "HEALTH"
+  | "NONPROFIT"
+  | "PROF_SERVICES"
+  | "RETAIL"
+  | "TRAVEL"
+  | "RESTAURANT"
+  | "NOT_A_BIZ";
+
+/**
+ * Perfil comercial de um número do trilho oficial — o que o cliente final vê
+ * ao abrir a conversa. Campo vazio LIMPA o valor na Meta: envie sempre o perfil
+ * inteiro (leia, edite, devolva).
+ */
+export interface BusinessProfile {
+  /** Linha curta sob o nome (até 139 caracteres). */
+  about?: string;
+  /** Até 256 caracteres. */
+  address?: string;
+  /** Até 512 caracteres. */
+  description?: string;
+  email?: string;
+  vertical?: BusinessVertical;
+  /** No máximo 2 sites. */
+  websites?: string[];
+  /** Foto atual, servida pela Meta. Só na leitura; troque pela rota da foto. */
+  readonly profile_picture_url?: string;
+}
+
+// ----- Templates (trilho oficial) -----
+
+export type TemplateCategory = "MARKETING" | "UTILITY" | "AUTHENTICATION";
+
+/** Cabeçalho do template. Texto aceita no MÁXIMO uma variável. */
+export interface TemplateHeader {
+  type: "text" | "image" | "video" | "document";
+  /** Cabeçalho de texto, até 60 caracteres. */
+  text?: string;
+  /** Valor de amostra da variável do cabeçalho. A Meta reprova variável sem exemplo. */
+  example?: string;
+  /**
+   * Só em cabeçalho de mídia — URL pública do arquivo de AMOSTRA (ou a `url`
+   * devolvida por `uploadTemplateMedia`). A API baixa e envia à Meta.
+   */
+  media_url?: string;
+}
+
+/** Corpo do template — o único componente obrigatório. */
+export interface TemplateBody {
+  /**
+   * Use `{{1}}`, `{{2}}`… para os valores que mudam, numerados a partir de 1 e
+   * sem pular. Não pode começar nem terminar com variável, e duas variáveis não
+   * podem ficar coladas — a Meta reprova os três casos, e a API confere antes.
+   */
+  text: string;
+  /** Um valor de amostra por variável, na ordem. Omitir é o motivo nº 1 de reprovação. */
+  example?: string[];
+}
+
+export interface TemplateButton {
+  type: "quick_reply" | "url" | "phone_number";
+  /** Até 25 caracteres. */
+  text: string;
+  /** Botões de url (até 2 por template); pode terminar com um `{{1}}`. */
+  url?: string;
+  /** Botões de telefone (no máximo 1 por template). */
+  phone?: string;
+  /** URL de amostra preenchida, obrigatória quando a url tem variável. */
+  example?: string;
+}
+
+/**
+ * O formato simples que você preenche. A API o converte no array de componentes
+ * da Meta — o aninhamento, o formato dos exemplos e as regras que ela não
+ * documenta junto não são problema seu. `POST /templates`
+ */
+export interface TemplateSpec {
+  /** Só minúsculas, números e `_`. É por ele que você envia. */
+  name: string;
+  /** Ex.: `pt_BR` (`pt-BR` também é aceito). */
+  language: string;
+  /**
+   * Decide quanto a conversa CUSTA e o que a Meta aceita no conteúdo — não é um
+   * rótulo administrativo. UTILITY é mais barata, mas linguagem promocional nela
+   * é reclassificada, e o preço muda junto.
+   */
+  category: TemplateCategory;
+  header?: TemplateHeader;
+  body: TemplateBody;
+  /** Até 60 caracteres. Não aceita variável. */
+  footer?: string;
+  /** Até 10 botões. */
+  buttons?: TemplateButton[];
+  /**
+   * Só em AUTHENTICATION (1 a 90). Nessa categoria a Meta escreve o texto e
+   * inclui o botão de copiar o código; isto é a única coisa que você define.
+   */
+  code_expiry_minutes?: number;
+}
+
+/** Um template como o bZapper o guarda. A Meta é a dona da verdade do status. */
+export interface Template {
+  id?: string;
+  project_id?: string;
+  name?: string;
+  language?: string;
+  category?: TemplateCategory;
+  /**
+   * A decisão é assíncrona e pode levar até 24h. Ela chega pelos webhooks
+   * `template.approved` / `template.rejected` — você não precisa ficar
+   * consultando.
+   */
+  status?: "PENDING" | "APPROVED" | "REJECTED" | "PAUSED" | "DISABLED";
+  /** O que a Meta disse ao reprovar. */
+  rejected_reason?: string;
+  /** RED = a Meta está prestes a pausá-lo sozinha. */
+  quality?: "GREEN" | "YELLOW" | "RED";
+  /** Quantos valores o corpo espera — e quantos você tem que enviar. */
+  variables?: number;
+  spec?: TemplateSpec;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** `GET /templates` */
+export interface TemplateList {
+  templates: Template[];
+}
+
+/** `POST /templates` */
+export interface CreateTemplateResult {
+  template?: Template;
+  /**
+   * Avisos que NÃO impediram a submissão mas mudam o resultado — linguagem
+   * promocional num template UTILITY, por exemplo, que a Meta reclassifica
+   * sozinha, e reclassificar muda o preço.
+   */
+  advice?: string[];
+}
+
+/** `POST /templates/sync` */
+export interface TemplateSyncResult {
+  /** Quantos templates vieram da Meta. */
+  imported?: number;
+}
+
+/** `GET /templates/fallback` */
+export interface FallbackTemplate {
+  /** `null` quando não há alternativa configurada. */
+  template: Template | null;
+}
+
+/** `PUT /templates/fallback` */
+export interface SetFallbackTemplateParams {
+  /** Id do template APROVADO. String vazia limpa a alternativa. */
+  template_id?: string;
+}
+
+/**
+ * Envio de template aprovado — o único jeito de iniciar conversa fora da janela
+ * de 24h. `POST /messages/template`
+ */
+export interface SendTemplateParams extends SendBase {
+  /** NOME do template. O id que a Meta deu a ele nunca aparece aqui. */
+  template: string;
+  /**
+   * Ex.: `pt_BR`. Pode ser omitido quando o nome existe num só idioma; se
+   * existir em mais de um, a API devolve 409 `template_ambiguous` em vez de
+   * escolher por você.
+   */
+  language?: string;
+  /**
+   * Valores do corpo, na ordem (`{{1}}`, `{{2}}`…). A quantidade tem que bater
+   * exatamente com o template aprovado — divergência é a causa nº 1 do erro
+   * 132000 da Meta, e a API confere antes de gastar a chamada.
+   */
+  variables?: string[];
+  /** Valor da variável do cabeçalho, quando o template tem uma. */
+  header_variables?: string[];
+  /** Valores de botões de URL dinâmica, por índice de botão. Entradas vazias são puladas. */
+  button_variables?: string[];
+  /**
+   * Só em template de categoria AUTHENTICATION. A Meta exige o código no corpo
+   * E no botão de copiar; a API coloca nos dois.
+   */
+  code?: string;
 }
 
 // ----- Campanhas -----

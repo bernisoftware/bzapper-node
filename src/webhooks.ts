@@ -58,6 +58,23 @@ export const EVENT_TYPES = [
   "group.participant_demoted",
   "group.subject_changed",
   "group.description_changed",
+  // WhatsApp oficial (Cloud API): o que a Meta decide sobre templates, número e conta.
+  "template.approved",
+  "template.rejected",
+  "template.paused",
+  "template.quality_changed",
+  "template.categorized",
+  "instance.quality_changed",
+  "instance.limit_changed",
+  "instance.name_decided",
+  "account.status_changed",
+  "account.alert",
+  "contact.opted_in",
+  // Conta: franquia do plano, cobrança e avisos de integração.
+  "usage.threshold",
+  "billing.past_due",
+  "billing.recovered",
+  "advisory.published",
 ] as const;
 
 /**
