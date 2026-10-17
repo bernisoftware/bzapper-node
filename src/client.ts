@@ -61,6 +61,7 @@ import type {
   MetaWebhookEventList,
   OfficialMedia,
   OfficialMediaInfo,
+  OfficialInsights,
   SendPollParams,
   SendReactionParams,
   SendTextParams,
@@ -640,6 +641,15 @@ export class Bzapper {
    */
   async listOfficialNumbers(options?: RequestOptions): Promise<OfficialNumberList> {
     return this.get("/official/numbers", undefined, options);
+  }
+
+  /**
+   * Painel do oficial: quanto a Meta vai cobrar (estimado por categoria, com
+   * projeção do mês e comparação com o período anterior) e os KPIs do trilho.
+   * Período: `days` (7, 30, 90…) ou `from`/`to` (RFC 3339). `GET /official/insights`
+   */
+  async getOfficialInsights(params: { days?: number; from?: string; to?: string } = {}, options?: RequestOptions): Promise<OfficialInsights> {
+    return this.get("/official/insights", { days: params.days, from: params.from, to: params.to }, options);
   }
 
   /**

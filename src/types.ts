@@ -140,6 +140,28 @@ export interface MetaWebhookEvent {
 
 export interface MetaWebhookEventList { data: MetaWebhookEvent[] }
 
+/** Painel do oficial: custo estimado com a Meta (por categoria, com projeção do mês) e KPIs do trilho. */
+export interface OfficialInsights {
+  from: string;
+  to: string;
+  rate_card: { market: string; currency: string; effective: string; source: string; rates: Record<string, number>; tiers: { from: number; rate: number }[] };
+  cost: {
+    currency: string; period: number; previous_period: number; change_pct: number | null;
+    month_to_date: number; projected_month: number;
+    by_category: { category: "marketing" | "utility" | "authentication" | "service"; messages: number; billable: number; cost: number }[];
+    confirmed: number; estimated: number; other_countries: number;
+  };
+  messages: {
+    sent: number; delivered: number; read: number; failed: number; received: number;
+    delivery_rate: number; read_rate: number; free_messages: number; contacts: number;
+  };
+  templates: { name: string; category: string; sent: number; failed: number; cost: number }[];
+  failures: { reason: string; count: number }[];
+  ad_referrals: number;
+  marketing_opt_outs: number;
+  numbers: { display_number: string; quality: string; limit: string; status: string }[];
+}
+
 /** Arquivo guardado na Meta: reaproveite como `media.id` por 30 dias, do mesmo número. */
 export interface OfficialMedia {
   id: string;

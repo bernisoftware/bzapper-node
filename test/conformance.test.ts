@@ -170,6 +170,7 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   getOfficialStatus: ({ bz, opts }) => bz.getOfficialStatus(opts),
   getOfficialSignupConfig: ({ bz, opts }) => bz.getOfficialSignupConfig(opts),
   completeOfficialSignup: ({ bz, opts }, a) => bz.completeOfficialSignup(a.body, opts),
+  getOfficialInsights: ({ bz, opts }, a) => bz.getOfficialInsights({ days: a.query.days, from: a.query.from, to: a.query.to }, opts),
   uploadOfficialMedia: ({ bz, opts }, a) => bz.uploadOfficialMedia(file(a.body), { instance_id: a.query.instance_id }, opts),
   getOfficialMedia: ({ bz, opts }, a) => bz.getOfficialMedia(a.path.media_id, { instance_id: a.query.instance_id }, opts),
   deleteOfficialMedia: ({ bz, opts }, a) => bz.deleteOfficialMedia(a.path.media_id, { instance_id: a.query.instance_id }, opts),
