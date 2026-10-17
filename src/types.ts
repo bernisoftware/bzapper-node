@@ -171,6 +171,13 @@ export interface SendOTPParams extends SendBase {
   body?: string;
   /** Opcional — menciona a expiração no texto gerado. */
   expiry_minutes?: number;
+  /**
+   * Só no oficial: template de AUTENTICAÇÃO aprovado que leva o código, mesmo com
+   * a janela aberta. Sem ele, o do projeto é usado só com a janela fechada.
+   */
+  template?: string;
+  /** Idioma do template de autenticação (ex.: `pt_BR`). */
+  language?: string;
 }
 
 export interface SendMediaParams extends SendBase {
