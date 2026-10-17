@@ -867,8 +867,9 @@ export class Bzapper {
   }
 
   /**
-   * Escolhe o template de Autenticação APROVADO que leva o código fora da janela
-   * (422 `template_not_authentication` em outra categoria). `template_id` vazio limpa.
+   * Escolhe o template APROVADO que leva o código fora da janela: de Autenticação ou, até a
+   * Meta liberar, o provisório de Utilidade com botão de copiar código (senão 422
+   * `template_not_otp_capable`). `template_id` vazio limpa.
    * `PUT /templates/otp`
    */
   async setOTPTemplate(params: { template_id?: string }, options?: RequestOptions): Promise<void> {
