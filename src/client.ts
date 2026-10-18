@@ -78,6 +78,7 @@ import type {
   CampaignDryRun,
   CampaignEstimate,
   CampaignMetaCost,
+  NumberHealth,
   EstimateCampaignParams,
   PartnerConnection,
   PartnerConnectionList,
@@ -722,6 +723,14 @@ export class Bzapper {
    */
   async setDefaultOfficialNumber(id: string, options?: RequestOptions): Promise<void> {
     return this.put(`/official/numbers/${p(id)}/default`, undefined, undefined, options);
+  }
+
+  /**
+   * Histórico de qualidade e limite de envio do número — cada mudança, da mais
+   * recente para a mais antiga. `GET /official/numbers/{id}/health`
+   */
+  async getOfficialNumberHealth(id: string, options?: RequestOptions): Promise<NumberHealth> {
+    return this.get(`/official/numbers/${p(id)}/health`, undefined, options);
   }
 
   /**

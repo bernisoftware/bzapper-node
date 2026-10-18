@@ -949,6 +949,13 @@ export interface CampaignEstimate {
   estimated_human: string;
 }
 
+/** Estado atual e histórico de mudanças de qualidade e limite de um número oficial. */
+export interface NumberHealth {
+  quality_rating: string;
+  messaging_limit: string;
+  history: Array<{ quality_rating: string; messaging_limit: string; at: string }>;
+}
+
 /** Quanto a Meta vai cobrar por uma campanha de template (trilho oficial). */
 export interface CampaignMetaCost {
   currency: string;

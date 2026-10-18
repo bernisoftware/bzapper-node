@@ -180,6 +180,7 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   listAvailableOfficialNumbers: ({ bz, opts }) => bz.listAvailableOfficialNumbers(opts),
   addOfficialNumber: ({ bz, opts }, a) => bz.addOfficialNumber(a.body, opts),
   setDefaultOfficialNumber: ({ bz, opts }, a) => bz.setDefaultOfficialNumber(a.path.id, opts),
+  getOfficialNumberHealth: ({ bz, opts }, a) => bz.getOfficialNumberHealth(a.path.id, opts),
   disconnectOfficialNumber: ({ bz, opts }, a) => bz.disconnectOfficialNumber(a.path.id, opts),
   getOfficialProfile: ({ bz, opts }) => bz.getOfficialProfile(opts),
   updateOfficialProfile: ({ bz, opts }, a) => bz.updateOfficialProfile(a.body, opts),
