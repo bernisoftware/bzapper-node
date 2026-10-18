@@ -928,7 +928,7 @@ export class Bzapper {
 
   /**
    * Escolhe o template APROVADO que leva o código fora da janela: de Autenticação ou, até a
-   * Meta liberar, o provisório de Utilidade com botão de copiar código (senão 422
+   * Meta liberar, o provisório de Utilidade com uma variável para o código (senão 422
    * `template_not_otp_capable`). `template_id` vazio limpa.
    * `PUT /templates/otp`
    */
