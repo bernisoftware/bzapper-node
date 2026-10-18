@@ -1895,6 +1895,17 @@ export interface TemplateSpec {
    * inclui o botão de copiar o código; isto é a única coisa que você define.
    */
   code_expiry_minutes?: number;
+  /**
+   * Oferta por tempo limitado (MARKETING): selo de até 16 caracteres e, com
+   * `has_expiration`, contagem regressiva até o `offer_expires_at` do envio.
+   */
+  limited_time_offer?: { text: string; has_expiration?: boolean };
+  /**
+   * Carrossel (MARKETING ou UTILITY, 2 a 10 cartões): o template fica só com o
+   * `body` de abertura; cada cartão tem mídia, texto e 1–2 botões, com o mesmo
+   * tipo de mídia e os mesmos botões em todos.
+   */
+  cards?: Array<{ header: TemplateHeader; body: TemplateBody; buttons: TemplateButton[] }>;
 }
 
 /** Um template como o bZapper o guarda. A Meta é a dona da verdade do status. */
@@ -2066,6 +2077,10 @@ export interface SendTemplateParams extends SendBase {
    * E no botão de copiar; a API coloca nos dois.
    */
   code?: string;
+  /** Oferta com prazo: o prazo deste envio (RFC 3339). */
+  offer_expires_at?: string;
+  /** Carrossel: os valores de cada cartão, na ordem. */
+  cards?: Array<{ header_url?: string; variables?: string[]; button_variables?: string[] }>;
 }
 
 // ----- Campanhas -----
