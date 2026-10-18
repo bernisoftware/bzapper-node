@@ -1927,6 +1927,24 @@ export interface TemplateList {
 }
 
 /** `POST /templates` */
+/** Desempenho de um template no período. */
+export interface TemplateStats {
+  name: string;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  /** Entregues / enviados, em porcentagem. */
+  delivery_rate: number;
+  /** Lidos / enviados, em porcentagem. */
+  read_rate: number;
+}
+
+export interface TemplateAnalytics {
+  days: number;
+  templates: TemplateStats[];
+}
+
 /** Filtros da Template Library da Meta (todos opcionais). */
 export interface LibraryQuery {
   search?: string;

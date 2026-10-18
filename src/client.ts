@@ -97,6 +97,7 @@ import type {
   CompleteOfficialSignupParams,
   CreateTemplateResult,
   LibraryCreate,
+  TemplateAnalytics,
   LibraryQuery,
   LibraryTemplateList,
   FallbackTemplate,
@@ -850,6 +851,14 @@ export class Bzapper {
    */
   async editTemplate(id: string, params: TemplateSpec, options?: RequestOptions): Promise<CreateTemplateResult> {
     return this.put(`/templates/${p(id)}`, params, undefined, options);
+  }
+
+  /**
+   * Desempenho de cada template (enviados, entregues, lidos, falhas) nos últimos
+   * `days` dias (1–90, padrão 30). `GET /templates/analytics`
+   */
+  async getTemplateAnalytics(days?: number, options?: RequestOptions): Promise<TemplateAnalytics> {
+    return this.get("/templates/analytics", { days }, options);
   }
 
   /**
