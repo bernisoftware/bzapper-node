@@ -197,6 +197,7 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   createTemplate: ({ bz, opts }, a) => bz.createTemplate(a.body, opts),
   getTemplate: ({ bz, opts }, a) => bz.getTemplate(a.path.id, opts),
   deleteTemplate: ({ bz, opts }, a) => bz.deleteTemplate(a.path.id, opts),
+  validateTemplate: ({ bz, opts }, a) => bz.validateTemplate(a.body, a.query.id as string | undefined, opts),
   getTemplateAnalytics: ({ bz, opts }, a) => bz.getTemplateAnalytics(a.query.days as number | undefined, opts),
   editTemplate: ({ bz, opts }, a) => bz.editTemplate(a.path.id, a.body, opts),
   listLibraryTemplates: ({ bz, opts }, a) => bz.listLibraryTemplates(a.query, opts),

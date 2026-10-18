@@ -1958,6 +1958,14 @@ export interface TemplateList {
 }
 
 /** `POST /templates` */
+/** Veredito de validateTemplate. */
+export interface TemplateCheck {
+  valid: boolean;
+  /** O que a Meta recusaria, e como consertar. */
+  problem?: string;
+  advice?: string[];
+}
+
 /** Desempenho de um template no período. */
 export interface TemplateStats {
   name: string;

@@ -100,6 +100,7 @@ import type {
   CreateTemplateResult,
   LibraryCreate,
   TemplateAnalytics,
+  TemplateCheck,
   LibraryQuery,
   LibraryTemplateList,
   FallbackTemplate,
@@ -873,6 +874,14 @@ export class Bzapper {
   }
 
   /**
+   * Confere o template com as regras da Meta SEM submeter (não chama a Meta nem
+   * gasta submissão). `id` confere uma edição. `POST /templates/validate`
+   */
+  async validateTemplate(params: TemplateSpec, id?: string, options?: RequestOptions): Promise<TemplateCheck> {
+    return this.post("/templates/validate", params, id ? { id } : undefined, options);
+  }
+
+  /**
    * Desempenho de cada template (enviados, entregues, lidos, falhas) nos últimos
    * `days` dias (1–90, padrão 30). `GET /templates/analytics`
    */
@@ -928,7 +937,8 @@ export class Bzapper {
 
   /**
    * Escolhe o template APROVADO que leva o código fora da janela: de Autenticação ou, até a
-   * Meta liberar, o provisório de Utilidade com uma variável para o código (senão 422
+   * Meta liberar, o provisório (Marketing com botão de copiar código, ou Utilidade com uma
+   * variável para o código) (senão 422
    * `template_not_otp_capable`). `template_id` vazio limpa.
    * `PUT /templates/otp`
    */
