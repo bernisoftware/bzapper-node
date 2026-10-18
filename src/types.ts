@@ -1927,6 +1927,55 @@ export interface TemplateList {
 }
 
 /** `POST /templates` */
+/** Filtros da Template Library da Meta (todos opcionais). */
+export interface LibraryQuery {
+  search?: string;
+  topic?: string;
+  usecase?: string;
+  industry?: string;
+  language?: string;
+}
+
+/** Modelo pronto da Template Library da Meta. */
+export interface LibraryTemplate {
+  id?: string;
+  name: string;
+  language: string;
+  category: "UTILITY" | "AUTHENTICATION";
+  topic?: string;
+  usecase?: string;
+  industry?: string[];
+  header?: string;
+  /** Corpo com variáveis {{n}}. */
+  body: string;
+  /** Exemplo de cada variável. */
+  body_params?: string[];
+  buttons?: Array<Record<string, unknown>>;
+}
+
+export interface LibraryTemplateList {
+  templates: LibraryTemplate[];
+}
+
+/** O que um botão de link ou de telefone do modelo pede. */
+export interface LibraryButtonInput {
+  type: "url" | "phone_number";
+  url?: string;
+  url_suffix_example?: string;
+  phone?: string;
+}
+
+/** Criação a partir da Template Library. */
+export interface LibraryCreate {
+  library_template_name: string;
+  /** Seu nome para o template (padrão: o da biblioteca). */
+  name?: string;
+  language: string;
+  button_inputs?: LibraryButtonInput[];
+  /** Só em modelo de Autenticação (padrão 10). */
+  code_expiry_minutes?: number;
+}
+
 export interface CreateTemplateResult {
   template?: Template;
   /**

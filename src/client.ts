@@ -96,6 +96,9 @@ import type {
   BusinessProfile,
   CompleteOfficialSignupParams,
   CreateTemplateResult,
+  LibraryCreate,
+  LibraryQuery,
+  LibraryTemplateList,
   FallbackTemplate,
   MetaPhoneNumberList,
   OfficialNumberList,
@@ -836,6 +839,35 @@ export class Bzapper {
    */
   async deleteTemplate(id: string, options?: RequestOptions): Promise<void> {
     return this.delete(`/templates/${p(id)}`, undefined, options);
+  }
+
+  /**
+   * Edita o conteúdo de um template que já existe na Meta. `PUT /templates/{id}`
+   *
+   * Nome e idioma não mudam. A Meta permite editar o APROVADO 1x a cada 24 horas
+   * e 10x em 30 dias, manda de volta para análise (volta a `PENDING` e não envia
+   * até a decisão) e não deixa o aprovado mudar de categoria.
+   */
+  async editTemplate(id: string, params: TemplateSpec, options?: RequestOptions): Promise<CreateTemplateResult> {
+    return this.put(`/templates/${p(id)}`, params, undefined, options);
+  }
+
+  /**
+   * Consulta a Template Library da Meta: textos de utilidade e autenticação que
+   * ela já aprovou. Criado sem mudar o texto, o template nasce aprovado.
+   * `GET /templates/library`
+   */
+  async listLibraryTemplates(params: LibraryQuery = {}, options?: RequestOptions): Promise<LibraryTemplateList> {
+    return this.get("/templates/library", { ...params }, options);
+  }
+
+  /**
+   * Cria um template a partir de um modelo da biblioteca — o texto é o da Meta,
+   * por isso nasce aprovado; você só informa o que os botões pedem.
+   * `POST /templates/library`
+   */
+  async createTemplateFromLibrary(params: LibraryCreate, options?: RequestOptions): Promise<CreateTemplateResult> {
+    return this.post("/templates/library", params, undefined, options);
   }
 
   /**
