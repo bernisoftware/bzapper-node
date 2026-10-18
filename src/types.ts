@@ -949,6 +949,17 @@ export interface CampaignEstimate {
   estimated_human: string;
 }
 
+/** Quanto a Meta vai cobrar por uma campanha de template (trilho oficial). */
+export interface CampaignMetaCost {
+  currency: string;
+  category: "marketing" | "utility" | "authentication" | "service";
+  unit_price: number;
+  total: number;
+  /** Contatos novos por dia que o número alcança. */
+  daily_limit?: number;
+  days_needed?: number;
+}
+
 /** Parâmetros (query) da estimativa ao vivo. */
 export interface EstimateCampaignParams {
   recipients?: number;
@@ -1720,6 +1731,8 @@ export interface OfficialReadiness {
   name_status?: string;
   /** Verificação da empresa (APPROVED, PENDING). É o que libera faixas maiores de volume. */
   business_review?: string;
+  /** Moeda em que a Meta cobra a conta. Conta brasileira em USD migra para BRL até 30/06/2027. */
+  currency?: string;
   quality_rating?: string;
   messaging_limit?: string;
   /** `invalid_token` (precisa reconectar) ou `meta_unavailable`. */

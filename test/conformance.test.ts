@@ -130,6 +130,7 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   listCampaigns: ({ bz, opts }, a) => bz.listCampaigns(a.query, opts),
   createCampaign: ({ bz, opts }, a) => bz.createCampaign(a.body, opts),
   estimateCampaign: ({ bz, opts }, a) => bz.estimateCampaign(a.query, opts),
+  estimateCampaignMetaCost: ({ bz, opts }, a) => bz.estimateCampaignMetaCost(a.query as { recipients: number; template: string; language?: string }, opts),
   getCampaignEligibility: ({ bz, opts }, a) => bz.getCampaignEligibility(a.query, opts),
   uploadCampaignMedia: ({ bz, opts }, a) => bz.uploadCampaignMedia(file(a.body), opts),
   getCampaign: ({ bz, opts }, a) => bz.getCampaign(a.path.id, opts),

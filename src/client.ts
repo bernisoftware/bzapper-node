@@ -77,6 +77,7 @@ import type {
   AddRecipientsResult,
   CampaignDryRun,
   CampaignEstimate,
+  CampaignMetaCost,
   EstimateCampaignParams,
   PartnerConnection,
   PartnerConnectionList,
@@ -443,6 +444,15 @@ export class Bzapper {
       },
       options,
     );
+  }
+
+  /**
+   * Trilho oficial: quanto a Meta vai cobrar por `recipients` mensagens do template
+   * (no seu cartão — o bZapper cobra só a mensalidade) e quantos dias o limite
+   * diário de contatos novos do número exige. `GET /campaigns/meta-cost`
+   */
+  async estimateCampaignMetaCost(params: { recipients: number; template: string; language?: string }, options?: RequestOptions): Promise<CampaignMetaCost> {
+    return this.get("/campaigns/meta-cost", { ...params }, options);
   }
 
   /** Elegibilidade de cada número para campanhas (conexão e tempo de conexão). `GET /campaigns/eligibility` */
