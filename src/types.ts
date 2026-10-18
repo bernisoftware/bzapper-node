@@ -714,6 +714,8 @@ export interface ContactRecord {
   tags?: string[];
   /** Chaves dos grupos de contato. */
   groups?: string[];
+  /** LID do WhatsApp (`<dígitos>@lid`) — só na ficha do contato. */
+  lid?: string;
 }
 export interface ContactRecordList {
   data: ContactRecord[];
@@ -1280,8 +1282,10 @@ export interface ContactAddress {
 
 /** `POST /contacts` */
 export interface CreateContactParams {
-  /** `+DDIdigits` (E.164 sem espaços). */
+  /** `+DDIdigits` (E.164 sem espaços) ou o LID do WhatsApp (`<dígitos>@lid`). */
   phone: string;
+  /** LID do WhatsApp; com o telefone, o contato do LID se funde ao do telefone. */
+  lid?: string;
   name?: string;
   email?: string;
   document?: string;
@@ -1300,8 +1304,10 @@ export interface UpdateContactParams {
 
 /** Uma linha do lote de {@link Bzapper.importContacts}. */
 export interface ContactImportRow {
-  /** `+DDIdigits` (E.164 sem espaços) — a chave do upsert. */
+  /** `+DDIdigits` ou o LID do WhatsApp (`<dígitos>@lid`) — a chave do upsert. */
   phone: string;
+  /** LID do WhatsApp (`<dígitos>@lid` ou só os dígitos). */
+  lid?: string;
   name?: string;
   email?: string;
   document?: string;
@@ -1318,6 +1324,10 @@ export interface ImportContactsParams {
   contacts: ContactImportRow[];
   /** Valida e relata tudo sem escrever nada. Padrão `false`. */
   dry_run?: boolean;
+  /** Tags para TODAS as linhas (somam às de cada linha). */
+  tags?: string[];
+  /** Grupos para TODAS as linhas (somam aos de cada linha). */
+  groups?: string[];
 }
 
 /** Linha que a importação pulou (`skipped_rows`) ou recusou (`errors`). */

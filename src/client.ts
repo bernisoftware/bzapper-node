@@ -1249,7 +1249,7 @@ export class Bzapper {
    * Importa contatos em lote (upsert por telefone). `POST /contacts/import`
    *
    * Até 1000 linhas por chamada. Contato novo nasce com `source: import` e
-   * `status: pending_validation` (precisa de opt-in antes de campanha); no que
+   * `status: pending_validation` (já pode receber campanha e vira ativo quando a pessoa responde); no que
    * já existe, só os campos informados mudam — valor vazio nunca apaga o que
    * está lá. Supresso/opt-out/bloqueado aparece em `skipped_rows` e não
    * ressuscita. Tags e grupos são criados sob demanda. Linha ruim vai para
