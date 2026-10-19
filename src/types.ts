@@ -716,6 +716,8 @@ export interface ContactRecord {
   groups?: string[];
   /** LID do WhatsApp (`<dígitos>@lid`) — só na ficha do contato. */
   lid?: string;
+  /** BSUID da Meta (trilho oficial): o endereço de quem esconde o telefone atrás de um nome de usuário. */
+  bsuid?: string;
 }
 export interface ContactRecordList {
   data: ContactRecord[];
@@ -1286,6 +1288,8 @@ export interface CreateContactParams {
   phone: string;
   /** LID do WhatsApp; com o telefone, o contato do LID se funde ao do telefone. */
   lid?: string;
+  /** BSUID da Meta (`BR.1349…`, trilho oficial); com o telefone, fica gravado no contato dele. */
+  bsuid?: string;
   name?: string;
   email?: string;
   document?: string;
@@ -1308,6 +1312,8 @@ export interface ContactImportRow {
   phone: string;
   /** LID do WhatsApp (`<dígitos>@lid` ou só os dígitos). */
   lid?: string;
+  /** BSUID da Meta (`BR.1349…`, trilho oficial). Também aceito em `phone`. */
+  bsuid?: string;
   name?: string;
   email?: string;
   document?: string;

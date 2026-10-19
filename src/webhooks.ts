@@ -116,6 +116,8 @@ export interface WebhookSender {
   lid?: string;
   /** Phone (+DDIdigits) when known; absent if the person only arrived by @lid. */
   phone?: string;
+  /** Meta business-scoped user ID (official rail). */
+  bsuid?: string;
   name?: string;
 }
 
@@ -204,6 +206,7 @@ function toEvent(envelope: Record<string, unknown>): WebhookEvent {
           lid: (s as Record<string, unknown>).lid as string | undefined,
           phone: (s as Record<string, unknown>).phone as string | undefined,
           name: (s as Record<string, unknown>).name as string | undefined,
+          bsuid: (s as Record<string, unknown>).bsuid as string | undefined,
         }
       : undefined;
   const mentions = Array.isArray(envelope.mentions)

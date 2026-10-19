@@ -1,6 +1,6 @@
 {
   "name": "@bzapper/client",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "description": "SDK oficial do bZapper para Node/TypeScript — gateway de WhatsApp multi-tenant.",
   "license": "MIT",
   "author": "Berni Software",
