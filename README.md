@@ -16,7 +16,7 @@ npm i @bzapper/client
 
 Requer **Node 18+** (fetch nativo).
 
-**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.15.2"`, sem `^`): cada release
+**Fixe a versão exata** no `package.json` (`"@bzapper/client": "0.16.0"`, sem `^`): cada release
 declara nas notas se muda a superfície pública ou se é só aditiva.
 
 ## Hello world
@@ -240,6 +240,7 @@ const inst = await bz.createInstance({
 });
 
 await bz.getInstance(inst.id);
+const up = await bz.getInstanceUptime(inst.id); // up.windows["24h"] / ["7d"] / ["30d"] (null = sem histórico ainda), up.events
 
 // Conexão por QR (default) ou código de pareamento.
 const qr = await bz.connectInstance(inst.id, "qr");
@@ -645,7 +646,7 @@ npx @bzapper/client listen --forward-to http://localhost:3000/webhooks/bzapper
 ```
 
 ```
-bZapper v0.15.2 — relay de webhooks para o localhost
+bZapper v0.16.0 — relay de webhooks para o localhost
   ouvindo    https://api.bzapper.com.br/webhooks/listen
   reenviando http://localhost:3000/webhooks/bzapper
   secret     whsec_Hs3…
@@ -845,6 +846,15 @@ Com a API key da própria conta, o cliente vê e desconecta os parceiros:
 ```ts
 const { data: apps } = await bz.listConnectedApps(); // com partner_name / partner_logo_url
 await bz.revokeConnectedApp(apps[0].id);             // admin; a key do parceiro para na hora
+```
+
+### Conector de IA (MCP)
+
+Apps de IA (ex.: Claude) que uma pessoa autorizou a operar a conta pelo conector MCP:
+
+```ts
+const { data: conns } = await bz.listAIConnections(); // client_name, user_email, user_role, scopes, last_used_at
+await bz.revokeAIConnection(conns[0].id);             // os tokens dele param na próxima chamada
 ```
 
 ## Uso

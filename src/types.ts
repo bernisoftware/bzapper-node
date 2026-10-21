@@ -338,6 +338,22 @@ export interface Instance {
   last_send_error?: string;
 }
 
+/** Disponibilidade do número (`getInstanceUptime`). */
+export interface InstanceUptime {
+  instance_id: string;
+  /** Status atual. */
+  status?: string;
+  /** Desde quando o número está no status atual. */
+  since?: string;
+  /** Primeira troca de status registrada: janela que vai além dela encolhe até aqui. */
+  tracked_since?: string;
+  /** % do tempo conectado (0–100, uma casa; aquecimento conta como conectado).
+   *  `null` enquanto o histórico ainda não cobre a janela. */
+  windows: { "24h": number | null; "7d": number | null; "30d": number | null };
+  /** Últimas trocas de status, da mais nova à mais antiga (até 20). */
+  events?: { status: string; reason?: string; at: string }[];
+}
+
 /**
  * Bloqueio anti-spam do WhatsApp (reach-out time-lock). É limite por conta, não
  * falha de infraestrutura: a sessão segue saudável, responder a quem falou
@@ -1097,6 +1113,30 @@ export interface PartnerConnectionWithKey extends PartnerConnection {
 
 export interface PartnerConnectionList {
   data: PartnerConnection[];
+}
+
+/** App de IA (cliente MCP) que uma pessoa autorizou a operar esta conta. */
+export interface AIConnection {
+  id: string;
+  /** Nome com que o app de IA se registrou, ex.: "Claude". */
+  client_name?: string;
+  /** Pessoa que autorizou. */
+  user_id?: string;
+  user_name?: string;
+  user_email?: string;
+  /** Papel ATUAL da pessoa (a conexão nunca passa dele). */
+  user_role?: "admin" | "agent";
+  /** Projetos que a conexão alcança. */
+  project_ids?: string[];
+  /** Permissões: `bzapper:read` (sempre), `bzapper:contacts`, `bzapper:send`, `bzapper:campaigns`. */
+  scopes?: string[];
+  created_at?: string;
+  /** Ausente até a primeira chamada. */
+  last_used_at?: string;
+}
+
+export interface AIConnectionList {
+  data: AIConnection[];
 }
 
 /** Parâmetros de `createConnectSession`. */

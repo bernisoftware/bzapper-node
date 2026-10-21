@@ -154,6 +154,7 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   listInstances: ({ bz, opts }, a) => bz.listInstances(a.query, opts),
   createInstance: ({ bz, opts }, a) => bz.createInstance(a.body, opts),
   getInstance: ({ bz, opts }, a) => bz.getInstance(a.path.id, opts),
+  getInstanceUptime: ({ bz, opts }, a) => bz.getInstanceUptime(a.path.id, opts),
   deleteInstance: ({ bz, opts }, a) => bz.deleteInstance(a.path.id, opts),
   connectInstance: ({ bz, opts }, a) => bz.connectInstance(a.path.id, a.query.method, opts),
   disconnectInstance: ({ bz, opts }, a) => bz.disconnectInstance(a.path.id, opts),
@@ -323,6 +324,8 @@ const OPS: Record<string, (c: Clients, a: A) => Promise<unknown>> = {
   triggerWebhookEvent: ({ bz, opts }, a) => bz.triggerWebhook(a.body?.event_type, opts),
 
   // bZapper Connect — lado do cliente
+  listAIConnections: ({ bz, opts }) => bz.listAIConnections(opts),
+  revokeAIConnection: ({ bz, opts }, a) => bz.revokeAIConnection(a.path.id, opts),
   listConnectedApps: ({ bz, opts }) => bz.listConnectedApps(opts),
   revokeConnectedApp: ({ bz, opts }, a) => bz.revokeConnectedApp(a.path.id, opts),
   convertConnectedAppToStandalone: ({ bz, opts }, a) => bz.convertConnectedAppToStandalone(a.path.id, opts),

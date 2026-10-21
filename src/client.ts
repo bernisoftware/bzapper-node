@@ -39,6 +39,7 @@ import type {
   GroupInvite,
   GroupList,
   Instance,
+  InstanceUptime,
   InstanceList,
   ListInstancesParams,
   JoinGroupParams,
@@ -82,6 +83,7 @@ import type {
   EstimateCampaignParams,
   PartnerConnection,
   PartnerConnectionList,
+  AIConnectionList,
   // r2
   AccountUpdated,
   AddonCart,
@@ -516,6 +518,14 @@ export class Bzapper {
   /** Detalha uma instância. `GET /instances/{id}` */
   async getInstance(id: string, options?: RequestOptions): Promise<Instance> {
     return this.get(`/instances/${p(id)}`, undefined, options);
+  }
+
+  /**
+   * Disponibilidade do número: % do tempo conectado em 24h, 7d e 30d, desde quando
+   * está no status atual e as 20 últimas trocas de status. `GET /instances/{id}/uptime`
+   */
+  async getInstanceUptime(id: string, options?: RequestOptions): Promise<InstanceUptime> {
+    return this.get(`/instances/${p(id)}/uptime`, undefined, options);
   }
 
   /** Remove uma instância (encerra a sessão). `DELETE /instances/{id}` */
@@ -1684,6 +1694,28 @@ export class Bzapper {
    */
   async convertConnectedAppToStandalone(id: string, options?: RequestOptions): Promise<PartnerConnection> {
     return this.post(`/me/connections/${p(id)}/standalone`, undefined, undefined, options);
+  }
+
+  // -------------------------------------------------------------------------
+  // Conector de IA (MCP)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Lista os apps de IA conectados a esta conta pelo conector MCP, do mais novo
+   * ao mais antigo. Admin vê todas as conexões da conta; agente, só as dele;
+   * uma API key sem pessoa por trás só vê se for key de admin. `GET /ai-connections`
+   */
+  async listAIConnections(options?: RequestOptions): Promise<AIConnectionList> {
+    return this.get("/ai-connections", undefined, options);
+  }
+
+  /**
+   * Revoga o acesso de um app de IA: os tokens dele param na próxima chamada.
+   * Admin revoga qualquer conexão da conta; agente, só as dele.
+   * `DELETE /ai-connections/{id}`
+   */
+  async revokeAIConnection(id: string, options?: RequestOptions): Promise<void> {
+    return this.delete(`/ai-connections/${p(id)}`, undefined, options);
   }
 
   // -------------------------------------------------------------------------
